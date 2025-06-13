@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../services/vibration_service.dart';
-import '../utils/vibration_pattern_tester.dart';
-import '../widgets/device_info_card.dart';
-import '../widgets/pattern_test_section.dart';
-import '../widgets/comparison_test_section.dart';
-import '../widgets/intensity_test_section.dart';
+import 'dart:io' show Platform;
+import '../../services/vibration_service.dart';
+import '../../utils/vibration_pattern_tester.dart';
+import 'widgets/device_info_card.dart';
+import 'widgets/comparison_test_section.dart';
+import 'widgets/intensity_test_section.dart';
+import 'widgets/pattern_test_section.dart';
 
 class VibrationTestScreen extends StatefulWidget {
   const VibrationTestScreen({super.key});
@@ -16,26 +17,54 @@ class VibrationTestScreen extends StatefulWidget {
 class _VibrationTestScreenState extends State<VibrationTestScreen> {
   final VibrationService _vibrationService = VibrationService();
   final VibrationPatternTester _patternTester = VibrationPatternTester();
+  final bool _isIOS = Platform.isIOS;
+  final bool _isMobilePlatform = Platform.isIOS || Platform.isAndroid;
   bool _supportsVibration = false;
   bool _supportsAmplitude = false;
+  bool _vibrationWorking = false;
   String _selectedPattern1 = 'onRoute';
   String _selectedPattern2 = 'approachingTurn';
   int _currentIntensity = VibrationService.mediumIntensity;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _checkVibrationSupport();
+    _initializeVibration();
   }
 
-  Future<void> _checkVibrationSupport() async {
-    final hasVibrator = await _vibrationService.hasVibrator();
-    final hasAmplitudeControl = await _vibrationService.hasAmplitudeControl();
+  Future<void> _initializeVibration() async {
+    try {
+      // Check if we're on a supported platform first
+      if (!_isMobilePlatform) {
+        setState(() {
+          _errorMessage =
+              'This platform may not support vibration functionality.';
+        });
+      }
 
-    setState(() {
-      _supportsVibration = hasVibrator;
-      _supportsAmplitude = hasAmplitudeControl;
-    });
+      await _vibrationService.initialize();
+
+      final hasVibrator = await _vibrationService.hasVibrator();
+      final hasAmplitudeControl = await _vibrationService.hasAmplitudeControl();
+
+      // Test if vibration actually works
+      final vibrationTest = await _vibrationService.testVibration();
+
+      setState(() {
+        _supportsVibration = hasVibrator;
+        _supportsAmplitude = hasAmplitudeControl;
+        _vibrationWorking = vibrationTest;
+        if (!_vibrationWorking && _errorMessage.isEmpty) {
+          _errorMessage =
+              'Vibration test failed. Check device settings and permissions.';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error initializing vibration: $e';
+      });
+    }
   }
 
   @override
@@ -60,6 +89,22 @@ class _VibrationTestScreenState extends State<VibrationTestScreen> {
                   DeviceInfoCard(
                     supportsVibration: _supportsVibration,
                     supportsAmplitude: _supportsAmplitude,
+                    vibrationWorking: _vibrationWorking,
+                    errorMessage: _errorMessage,
+                    isIOS: _isIOS,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final result = await _vibrationService.testVibration();
+                      setState(() {
+                        _vibrationWorking = result;
+                        _errorMessage = result
+                            ? ''
+                            : 'Vibration test failed. Check device settings.';
+                      });
+                    },
+                    child: const Text('Test Vibration'),
                   ),
                   const SizedBox(height: 16),
                   PatternTestSection(
@@ -120,10 +165,27 @@ class _VibrationTestScreenState extends State<VibrationTestScreen> {
                 ],
               ),
             )
-          : const Center(
-              child: Text(
-                'This device does not support vibration',
-                style: TextStyle(fontSize: 18),
+          : Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'This device does not support vibration',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  if (_errorMessage.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        _errorMessage,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ElevatedButton(
+                    onPressed: _initializeVibration,
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
             ),
     );

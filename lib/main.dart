@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'blocs/navigation/navigation_bloc.dart';
-import 'screens/home_screen.dart';
-import 'screens/vibration_test_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/vibration_test/vibration_test_screen.dart';
+import 'services/vibration_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set preferred orientations
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Initialize vibration service
+  final vibrationService = VibrationService();
+  await vibrationService.initialize();
 
   runApp(const EchoMapApp());
 }
@@ -29,15 +34,17 @@ class EchoMapApp extends StatelessWidget {
       child: MaterialApp(
         title: 'EchoMap',
         theme: ThemeData(
-          primarySwatch: Colors.blue,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
           // High contrast theme settings for accessibility
           brightness: Brightness.light,
         ),
         darkTheme: ThemeData(
-          primarySwatch: Colors.blue,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+            brightness: Brightness.dark,
+          ),
           useMaterial3: true,
-          brightness: Brightness.dark,
           visualDensity: VisualDensity.comfortable,
         ),
         themeMode: ThemeMode.system,

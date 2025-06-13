@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/vibration_service.dart';
-import '../utils/vibration_pattern_tester.dart';
+import '../../../services/vibration_service.dart';
+import '../../../utils/vibration_pattern_tester.dart';
 
 class ComparisonTestSection extends StatelessWidget {
   final VibrationPatternTester patternTester;

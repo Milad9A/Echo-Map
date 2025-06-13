@@ -23,7 +23,7 @@ class LocationService {
     // Test if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      // Location services are not enabled
+      // Location services are not enabled - could add a prompt to enable
       return false;
     }
 
@@ -37,7 +37,7 @@ class LocationService {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      // Permissions are permanently denied
+      // Permissions are permanently denied - show appropriate UI
       return false;
     }
 
@@ -49,7 +49,9 @@ class LocationService {
   Future<Position?> getCurrentPosition() async {
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
     } catch (e) {
       return null;
@@ -70,6 +72,7 @@ class LocationService {
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
             distanceFilter: 5, // Update every 5 meters
+            timeLimit: Duration(seconds: 10), // Timeout for getting location
           ),
         ).listen(
           (Position position) {
