@@ -41,9 +41,34 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
-    # Set deployment target for all pods to iOS 14.0
+    # Start of added configuration for fixing header issues
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      
+      # Fix for Xcode 15 and later - removes code signing issues
+      config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ""
+      config.build_settings['CODE_SIGNING_REQUIRED'] = "NO"
+      config.build_settings['CODE_SIGNING_ALLOWED'] = "NO"
+      
+      # Fix for header search paths
+      if target.name == 'Google-Maps-iOS-Utils'
+        config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) "${PODS_ROOT}/Headers/Private" "${PODS_ROOT}/Headers/Private/Google-Maps-iOS-Utils" "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Google-Maps-iOS-Utils" "${PODS_ROOT}/GoogleMaps/Maps/Frameworks/GoogleMaps.framework/Headers"'
+      end
     end
+    
+    # Fix umbrella header imports if needed
+    if target.name == 'Google-Maps-iOS-Utils'
+      fix_umbrella_header(installer, target)
+    end
+  end
+end
+
+# Helper method to fix umbrella header imports
+def fix_umbrella_header(installer, target)
+  umbrella_header_path = "#{installer.sandbox.build_headers_dir.realdirpath}/Google-Maps-iOS-Utils/Google-Maps-iOS-Utils-umbrella.h"
+  if File.exist?(umbrella_header_path)
+    content = File.read(umbrella_header_path)
+    fixed_content = content.gsub(/#import "(.+)"/, '#import <Google-Maps-iOS-Utils/\1>')
+    File.write(umbrella_header_path, fixed_content)
   end
 end

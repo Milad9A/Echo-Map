@@ -39,6 +39,16 @@ class HomeScreen extends StatelessWidget {
                 semanticsLabel: 'Open vibration pattern test screen',
               ),
             ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/location_test');
+              },
+              child: const Text(
+                'Location Test',
+                semanticsLabel: 'Open location service test screen',
+              ),
+            ),
           ],
         ),
       ),

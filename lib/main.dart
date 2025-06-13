@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'blocs/navigation/navigation_bloc.dart';
+import 'blocs/location/location_bloc.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/vibration_test/vibration_test_screen.dart';
+import 'screens/location_test/location_test_screen.dart';
 import 'services/vibration_service.dart';
+import 'services/location_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,9 +18,12 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Initialize vibration service
+  // Initialize services
   final vibrationService = VibrationService();
   await vibrationService.initialize();
+
+  final locationService = LocationService();
+  await locationService.initialize();
 
   runApp(const EchoMapApp());
 }
@@ -30,6 +36,7 @@ class EchoMapApp extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider<NavigationBloc>(create: (context) => NavigationBloc()),
+        BlocProvider<LocationBloc>(create: (context) => LocationBloc()),
       ],
       child: MaterialApp(
         title: 'EchoMap',
@@ -52,6 +59,7 @@ class EchoMapApp extends StatelessWidget {
         routes: {
           '/': (context) => const HomeScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
+          '/location_test': (context) => const LocationTestScreen(),
         },
       ),
     );
