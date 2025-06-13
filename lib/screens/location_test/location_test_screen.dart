@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/location/location_bloc.dart';
+import '../../blocs/location/location_event.dart';
+import '../../blocs/location/location_state.dart';
 import 'widgets/location_status_widget.dart';
 
 class LocationTestScreen extends StatefulWidget {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../blocs/location/location_bloc.dart';
+import '../../../blocs/location/location_state.dart';
+import '../../../blocs/location/location_event.dart';
 
 class LocationStatusWidget extends StatelessWidget {
   final bool showControls;
