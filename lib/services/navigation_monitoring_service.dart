@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/route_information.dart';
 import '../utils/navigation_utilities.dart';
+import '../utils/route_progress_tracker.dart';
 import 'location_service.dart';
 import 'mapping_service.dart';
 import 'vibration_service.dart';
@@ -25,11 +26,16 @@ class NavigationMonitoringService {
   final VibrationService _vibrationService = VibrationService();
   final TurnDetectionService _turnDetectionService = TurnDetectionService();
 
+  // Route progress tracker
+  final RouteProgressTracker _progressTracker = RouteProgressTracker();
+
   // Configuration
   static const double _routeDeviationThreshold = 25.0; // meters
   static const double _destinationReachedThreshold = 15.0; // meters
   static const double _approachingTurnThreshold = 50.0; // meters
   static const int _minReroutingInterval = 30; // seconds
+  static const int _routeFeedbackInterval = 10; // seconds
+  static const int _maxOffRouteTimeBeforeRerouting = 15; // seconds
 
   // State
   NavigationStatus _status = NavigationStatus.idle;
@@ -37,16 +43,19 @@ class NavigationMonitoringService {
   LatLng? _currentPosition;
   RouteStep? _nextStep;
   DateTime? _lastReroutingTime;
+  DateTime? _lastRouteFeedbackTime;
+  DateTime? _offRouteStartTime;
   bool _isMonitoring = false;
   bool _isOnRoute = true;
   int? _distanceToDestination;
   int? _estimatedTimeRemaining;
+  double _routeCompletionPercentage = 0.0;
+  double _currentSpeed = 0.0; // m/s
 
   // Subscriptions
   StreamSubscription<Position>? _locationSubscription;
   StreamSubscription<double>? _deviationSubscription;
-  StreamSubscription<RouteStep>? _upcomingTurnSubscription;
-  StreamSubscription<String>? _turnDirectionSubscription;
+  StreamSubscription<TurnNotification>? _turnNotificationSubscription;
 
   // Stream controllers
   final _statusController = StreamController<NavigationStatus>.broadcast();
@@ -55,6 +64,8 @@ class NavigationMonitoringService {
   final _upcomingTurnController = StreamController<RouteStep>.broadcast();
   final _destinationReachedController = StreamController<LatLng>.broadcast();
   final _reroutingController = StreamController<bool>.broadcast();
+  final _progressUpdateController = 
+      StreamController<NavigationProgress>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
   // Public streams
@@ -65,6 +76,8 @@ class NavigationMonitoringService {
   Stream<LatLng> get destinationReachedStream =>
       _destinationReachedController.stream;
   Stream<bool> get reroutingStream => _reroutingController.stream;
+  Stream<NavigationProgress> get progressStream => 
+      _progressUpdateController.stream;
   Stream<String> get errorStream => _errorController.stream;
 
   // Getters
@@ -76,6 +89,7 @@ class NavigationMonitoringService {
   bool get isOnRoute => _isOnRoute;
   int? get distanceToDestination => _distanceToDestination;
   int? get estimatedTimeRemaining => _estimatedTimeRemaining;
+  double get routeCompletionPercentage => _routeCompletionPercentage;
 
   // Start navigation monitoring with a specific route
   Future<bool> startNavigation(RouteInformation route) async {
@@ -88,6 +102,17 @@ class NavigationMonitoringService {
       _isOnRoute = true;
       _nextStep = null;
       _lastReroutingTime = null;
+      _lastRouteFeedbackTime = null;
+      _offRouteStartTime = null;
+      _routeCompletionPercentage = 0.0;
+      _currentSpeed = 0.0;
+
+      // Configure and start the route progress tracker
+      _progressTracker.configure(
+        routeDeviationThresholdMeters: _routeDeviationThreshold,
+        turnNotificationDistanceMeters: _approachingTurnThreshold,
+      );
+      _progressTracker.startTracking(route);
 
       // Ensure location service is running
       if (!_locationService.isTracking) {
@@ -123,19 +148,11 @@ class NavigationMonitoringService {
       await _turnDetectionService.startTurnDetection(route);
 
       // Subscribe to turn notifications
-      _upcomingTurnSubscription = _turnDetectionService.upcomingTurnStream
+      _turnNotificationSubscription = _turnDetectionService.turnNotificationStream
           .listen(
-            _handleUpcomingTurn,
+            _handleTurnNotification,
             onError: (error) {
-              _reportError('Turn detection error: $error');
-            },
-          );
-
-      _turnDirectionSubscription = _turnDetectionService.turnDirectionStream
-          .listen(
-            _handleTurnDirection,
-            onError: (error) {
-              _reportError('Turn direction error: $error');
+              _reportError('Turn notification error: $error');
             },
           );
 
@@ -157,17 +174,16 @@ class NavigationMonitoringService {
   Future<void> stopNavigation() async {
     _locationSubscription?.cancel();
     _deviationSubscription?.cancel();
-    _upcomingTurnSubscription?.cancel();
-    _turnDirectionSubscription?.cancel();
+    _turnNotificationSubscription?.cancel();
 
     _locationSubscription = null;
     _deviationSubscription = null;
-    _upcomingTurnSubscription = null;
-    _turnDirectionSubscription = null;
+    _turnNotificationSubscription = null;
 
     _mappingService.stopDeviationMonitoring();
     _turnDetectionService.stopTurnDetection();
     _vibrationService.stopVibration();
+    _progressTracker.stopTracking();
 
     _isMonitoring = false;
     _currentRoute = null;
@@ -184,11 +200,20 @@ class NavigationMonitoringService {
     // Skip further processing if not actively navigating
     if (_status != NavigationStatus.active || _currentRoute == null) return;
 
+    // Update the progress tracker
+    _progressTracker.updatePosition(newPosition);
+    
+    // Calculate current speed (in m/s)
+    _currentSpeed = position.speed;
+
     // Check if destination reached
     if (_checkDestinationReached(newPosition)) return;
 
-    // Update distance and time estimates
-    _updateNavigationProgress(newPosition);
+    // Update navigation progress
+    _updateNavigationProgress();
+    
+    // Provide periodic on-route feedback if needed
+    _providePeriodicFeedback();
   }
 
   // Check if the user has reached their destination
@@ -208,76 +233,72 @@ class NavigationMonitoringService {
     }
     return false;
   }
+  
+  // Provide periodic feedback when on route
+  void _providePeriodicFeedback() {
+    if (!_isOnRoute) return; // Only provide feedback when on route
+    
+    // Check if it's time for periodic feedback
+    final now = DateTime.now();
+    if (_lastRouteFeedbackTime == null || 
+        now.difference(_lastRouteFeedbackTime!).inSeconds >= _routeFeedbackInterval) {
+      
+      // Provide a gentle on-route feedback
+      _vibrationService.onRouteFeedback(intensity: VibrationService.lowIntensity);
+      _lastRouteFeedbackTime = now;
+    }
+  }
 
   // Update navigation progress based on current position
-  void _updateNavigationProgress(LatLng position) {
-    if (_currentRoute == null) return;
+  void _updateNavigationProgress() {
+    if (_currentRoute == null || _currentPosition == null) return;
 
-    // Calculate remaining distance
-    _distanceToDestination = _currentRoute!.getRemainingDistance(position);
+    // Get progress data from the tracker
+    _routeCompletionPercentage = _progressTracker.completedPercentage;
+    _distanceToDestination = _progressTracker.remainingDistanceMeters;
+    _estimatedTimeRemaining = _progressTracker.remainingTimeSeconds;
+    _nextStep = _progressTracker.nextTurn;
+    _isOnRoute = _progressTracker.isOnRoute;
 
-    // Calculate remaining time (simple estimate)
-    if (_distanceToDestination != null && _currentRoute!.durationSeconds > 0) {
-      final progressRatio =
-          1 - (_distanceToDestination! / _currentRoute!.distanceMeters);
-      _estimatedTimeRemaining =
-          (_currentRoute!.durationSeconds * (1 - progressRatio)).round();
-    }
-
-    // Find next upcoming turn if we don't have one already
-    if (_nextStep == null) {
-      _nextStep = _currentRoute!.getNextTurnAfter(position);
-      if (_nextStep != null) {
-        _upcomingTurnController.add(_nextStep!);
-      }
-    } else {
-      // Check if we're approaching the turn
-      final distanceToTurn = NavigationUtilities.calculateDistance(
-        position,
-        _nextStep!.startLocation,
-      );
-
-      if (distanceToTurn <= _approachingTurnThreshold) {
-        _upcomingTurnController.add(_nextStep!);
-      }
-
-      // Check if we've passed the turn
-      final bearingToTurn = NavigationUtilities.calculateBearing(
-        position,
-        _nextStep!.endLocation,
-      );
-
-      final currentBearing = position.heading;
-      final bearingDiff = (bearingToTurn - currentBearing).abs() % 360;
-
-      if (bearingDiff > 90 && distanceToTurn > _approachingTurnThreshold) {
-        // We've likely passed this turn, find the next one
-        _nextStep = _currentRoute!.getNextTurnAfter(position);
-        if (_nextStep != null) {
-          _upcomingTurnController.add(_nextStep!);
-        }
-      }
-    }
+    // Create and broadcast a progress update
+    final progress = NavigationProgress(
+      currentPosition: _currentPosition!,
+      distanceToDestination: _distanceToDestination ?? 0,
+      estimatedTimeRemaining: _estimatedTimeRemaining ?? 0,
+      completionPercentage: _routeCompletionPercentage,
+      isOnRoute: _isOnRoute,
+      nextStep: _nextStep,
+      distanceToNextStep: _progressTracker.distanceToNextTurnMeters,
+      currentSpeed: _currentSpeed,
+      timestamp: DateTime.now(),
+    );
+    
+    _progressUpdateController.add(progress);
   }
 
   // Handle route deviation events
   void _handleRouteDeviation(double deviation) {
-    if (deviation > 0) {
-      // We've deviated from the route
-      if (_isOnRoute) {
-        _isOnRoute = false;
-        _vibrationService.wrongDirectionFeedback();
-        _routeDeviationController.add(deviation);
-
-        // Check if we should start rerouting
-        if (_shouldStartRerouting()) {
-          _startRerouting(deviation);
-        }
-      }
-    } else if (!_isOnRoute) {
-      // We're back on route
+    // Broadcast the deviation
+    _routeDeviationController.add(deviation);
+    
+    // Check if we're off route or back on route
+    final isCurrentlyOnRoute = deviation <= _routeDeviationThreshold;
+    
+    if (!isCurrentlyOnRoute && _isOnRoute) {
+      // Just went off route
+      _isOnRoute = false;
+      _offRouteStartTime = DateTime.now();
+      _vibrationService.wrongDirectionFeedback();
+    } else if (isCurrentlyOnRoute && !_isOnRoute) {
+      // Just got back on route
       _isOnRoute = true;
+      _offRouteStartTime = null;
       _vibrationService.onRouteFeedback();
+    } else if (!isCurrentlyOnRoute && !_isOnRoute) {
+      // Still off route, check if we should reroute
+      if (_shouldStartRerouting()) {
+        _startRerouting(deviation);
+      }
     }
   }
 
@@ -293,8 +314,14 @@ class NavigationMonitoringService {
           .inSeconds;
       if (timeSinceLastRerouting < _minReroutingInterval) return false;
     }
+    
+    // Check if we've been off route long enough to justify rerouting
+    if (_offRouteStartTime != null) {
+      final timeOffRoute = DateTime.now().difference(_offRouteStartTime!).inSeconds;
+      return timeOffRoute >= _maxOffRouteTimeBeforeRerouting;
+    }
 
-    return true;
+    return false;
   }
 
   // Start the rerouting process
@@ -323,32 +350,15 @@ class NavigationMonitoringService {
     });
   }
 
-  // Handle upcoming turn notifications
-  void _handleUpcomingTurn(RouteStep step) {
-    _nextStep = step;
-
-    // Only provide feedback if we're in active navigation
-    if (_status == NavigationStatus.active) {
-      // Play appropriate haptic feedback for this turn
-      switch (step.turnDirection) {
-        case 'left':
-          _vibrationService.leftTurnFeedback();
-          break;
-        case 'right':
-          _vibrationService.rightTurnFeedback();
-          break;
-        case 'uturn':
-          _vibrationService.uTurnFeedback();
-          break;
-        default:
-          _vibrationService.approachingTurnFeedback();
-      }
-    }
-  }
-
-  // Handle turn direction updates
-  void _handleTurnDirection(String direction) {
-    // This is handled in upcoming turn
+  // Handle turn notifications
+  void _handleTurnNotification(TurnNotification notification) {
+    // Store the next step
+    _nextStep = notification.step;
+    
+    // Forward to the upcoming turn stream
+    _upcomingTurnController.add(notification.step);
+    
+    // Vibration feedback is handled by the turn detection service
   }
 
   // Handle reaching the destination
@@ -397,11 +407,60 @@ class NavigationMonitoringService {
     _upcomingTurnController.close();
     _destinationReachedController.close();
     _reroutingController.close();
+    _progressUpdateController.close();
     _errorController.close();
   }
 }
 
-// Extension to add heading property to LatLng for navigation purposes
-extension LatLngWithHeading on LatLng {
-  double get heading => 0.0; // This would be populated from Position data
+/// Class representing navigation progress data
+class NavigationProgress {
+  final LatLng currentPosition;
+  final int distanceToDestination;
+  final int estimatedTimeRemaining;
+  final double completionPercentage;
+  final bool isOnRoute;
+  final RouteStep? nextStep;
+  final int distanceToNextStep;
+  final double currentSpeed;
+  final DateTime timestamp;
+  
+  NavigationProgress({
+    required this.currentPosition,
+    required this.distanceToDestination,
+    required this.estimatedTimeRemaining,
+    required this.completionPercentage,
+    required this.isOnRoute,
+    this.nextStep,
+    required this.distanceToNextStep,
+    required this.currentSpeed,
+    required this.timestamp,
+  });
+  
+  String get distanceText {
+    if (distanceToDestination < 1000) {
+      return '$distanceToDestination m';
+    } else {
+      final km = distanceToDestination / 1000.0;
+      return '${km.toStringAsFixed(1)} km';
+    }
+  }
+  
+  String get timeText {
+    final minutes = (estimatedTimeRemaining / 60).round();
+    if (minutes < 60) {
+      return '$minutes min';
+    } else {
+      final hours = minutes ~/ 60;
+      final remainingMinutes = minutes % 60;
+      return '$hours hr ${remainingMinutes > 0 ? '$remainingMinutes min' : ''}';
+    }
+  }
+  
+  String get percentageText {
+    return '${(completionPercentage * 100).toStringAsFixed(0)}%';
+  }
+  
+  String get speedText {
+    return '${(currentSpeed * 3.6).toStringAsFixed(1)} km/h';
+  }
 }

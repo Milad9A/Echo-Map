@@ -7,7 +7,7 @@ import '../../blocs/location/location_event.dart';
 import '../../services/mapping_service.dart';
 import '../../services/routing_service.dart';
 import '../../models/route_information.dart';
-import '../../utils/map_config.dart'; // Import the new config file
+import '../../utils/map_config.dart';
 import 'package:geolocator/geolocator.dart';
 
 class MapScreen extends StatefulWidget {
@@ -17,7 +17,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final MappingService _mappingService = MappingService();
   final RoutingService _routingService = RoutingService();
 
@@ -31,23 +31,51 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeServices();
   }
 
   @override
   void dispose() {
-    // Only dispose of the controller if mapping service doesn't have it
-    if (_mapController != null &&
-        _mapController != _mappingService.mapController) {
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Properly handle map controller disposal
+    if (_mapController != null) {
       try {
-        _mapController!.dispose();
+        // Only dispose locally if it's not already managed by mapping service
+        if (_mapController != _mappingService.mapController) {
+          _mapController!.dispose();
+        }
       } catch (e) {
-        debugPrint('Error disposing map controller: $e');
+        debugPrint('Error disposing local map controller: $e');
       }
       _mapController = null;
     }
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Handle app lifecycle changes to better manage the map controller
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // If map was previously initialized but the app was in background,
+        // we might need to reinitialize
+        if (_mapInitialized && _mappingService.mapController == null) {
+          debugPrint('App resumed: Map needs to be reinitialized');
+          setState(() {
+            _mapInitialized = false;
+          });
+        }
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        break;
+      default:
+        break;
+    }
   }
 
   Future<void> _initializeServices() async {
@@ -152,7 +180,7 @@ class _MapScreenState extends State<MapScreen> {
       builder: (context, state) {
         return Stack(
           children: [
-            // Google Map - Use MapConfig.defaultPosition instead of the hardcoded constant
+            // Google Map - Use MapConfig.defaultPosition
             GoogleMap(
               initialCameraPosition: MapConfig.defaultPosition,
               myLocationEnabled: true,
@@ -162,35 +190,7 @@ class _MapScreenState extends State<MapScreen> {
               zoomControlsEnabled: false,
               markers: _mappingService.markers,
               polylines: _mappingService.polylines,
-              onMapCreated: (GoogleMapController controller) {
-                // Store controller locally
-                setState(() {
-                  _mapController = controller;
-                });
-
-                // Hand off controller to mapping service with a delay
-                Future.delayed(const Duration(milliseconds: 800), () {
-                  if (mounted) {
-                    // Only set the controller if it hasn't been set yet
-                    if (_mappingService.mapController == null) {
-                      _mappingService.setMapController(controller);
-                    }
-
-                    // Set flag that map is initialized
-                    setState(() {
-                      _mapInitialized = true;
-                    });
-
-                    // Add a delay before centering on user's location
-                    Future.delayed(const Duration(seconds: 2), () {
-                      if (mounted && !_centeringOnLocationRequested) {
-                        _centeringOnLocationRequested = true;
-                        _centerOnUserLocation();
-                      }
-                    });
-                  }
-                });
-              },
+              onMapCreated: _handleMapCreated,
             ),
 
             // Route information panel (if route is available)
@@ -265,55 +265,73 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // Center the map on the user's current location
+  // Improved map creation handler
+  void _handleMapCreated(GoogleMapController controller) {
+    // Set flag for local tracking
+    setState(() {
+      _mapController = controller;
+    });
+
+    // Use a phased approach to initialization to avoid race conditions
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        // Only set controller if it hasn't been set yet
+        _mappingService.setMapController(controller);
+
+        // Wait a bit to ensure the controller has time to initialize
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            setState(() {
+              _mapInitialized = true;
+            });
+
+            // Add a delay before centering on user's location
+            Future.delayed(const Duration(seconds: 1), () {
+              if (mounted && !_centeringOnLocationRequested) {
+                _centeringOnLocationRequested = true;
+                _centerOnUserLocation();
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Center the map on the user's current location - improved with error handling
   Future<void> _centerOnUserLocation() async {
     if (!mounted) return;
 
-    // Read the bloc state before any await to avoid using context after an async gap
-    final locationBlocState = context.read<LocationBloc>().state;
-
-    if (!_mapInitialized) {
-      debugPrint('Map not yet initialized, waiting...');
-      // Wait for map to initialize with a timeout
-      final initialized = await _mappingService.waitForMapInitialization(
-        timeout: const Duration(seconds: 5),
+    // Guard against multiple concurrent centering attempts
+    if (_centeringOnLocationRequested && !_mapInitialized) {
+      debugPrint(
+        'Centering already requested and map not ready yet. Waiting...',
       );
-      if (!initialized) {
-        debugPrint('Map initialization timed out, cannot center on location');
-        return;
-      }
+      return;
     }
 
-    try {
-      // Add a small delay to ensure the map is fully ready
-      await Future.delayed(const Duration(milliseconds: 300));
+    _centeringOnLocationRequested = true;
 
-      // If location tracking is active, use current position
-      if (locationBlocState is LocationTracking) {
-        await _mappingService.animateCameraToPosition(
-          LatLng(
-            locationBlocState.currentPosition.latitude,
-            locationBlocState.currentPosition.longitude,
+    try {
+      final result = await _mappingService.centerOnUserLocation(maxRetries: 3);
+      if (!result && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unable to center on your location. Please try again.',
+            ),
           ),
         );
-        return;
       }
-
-      // Otherwise use location service directly
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-
-      if (!mounted) return;
-
-      await _mappingService.animateCameraToPosition(
-        LatLng(position.latitude, position.longitude),
-      );
     } catch (e) {
       debugPrint('Error centering on user location: $e');
-      // Don't update state or show error to avoid disrupting the user experience
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to center on your location')),
+        );
+      }
+    } finally {
+      _centeringOnLocationRequested = false;
     }
   }
 
@@ -326,12 +344,12 @@ class _MapScreenState extends State<MapScreen> {
     _mappingService.clearPolylines();
   }
 
-  // Fit the map view to show the entire route
+  // Fit the map view to show the entire route - improved implementation
   void _fitRouteOnMap(List<LatLng> points) {
-    if (points.isEmpty || _mapController == null) return;
+    if (points.isEmpty || !_mapInitialized) return;
 
-    // Safety check to avoid using a disposed controller
-    if (!_mapInitialized) {
+    // Don't try to fit if the map isn't ready
+    if (!_mappingService.isMapReady) {
       debugPrint('Map not fully initialized, skipping route fitting');
       return;
     }
@@ -348,58 +366,44 @@ class _MapScreenState extends State<MapScreen> {
       if (point.longitude > maxLng) maxLng = point.longitude;
     }
 
-    // Add a short delay to ensure the map is ready for animations
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (!mounted || _mapController == null) return;
+    // Get local reference to controller
+    final controller = _mapController;
+    if (controller == null) return;
 
-      try {
-        final bounds = LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
-        );
+    // Use a more robust approach for fitting the route
+    try {
+      final bounds = LatLngBounds(
+        southwest: LatLng(minLat, minLng),
+        northeast: LatLng(maxLat, maxLng),
+      );
 
-        // Use a more reliable approach for animation
-        _mapController!
-            .animateCamera(CameraUpdate.newLatLngBounds(bounds, 50.0))
-            .timeout(
-              const Duration(seconds: 2),
-              onTimeout: () {
-                debugPrint(
-                  'Camera animation timed out, trying alternative approach',
+      // Add padding to bounds
+      final padding = MediaQuery.of(context).size.width * 0.25;
+
+      // Use a delayed operation to ensure the map is ready
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (!mounted || controller.hashCode != _mapController?.hashCode) return;
+
+        try {
+          controller
+              .animateCamera(CameraUpdate.newLatLngBounds(bounds, padding))
+              .catchError((e) {
+                debugPrint('Error animating camera: $e');
+
+                // Try simpler center approach as fallback
+                final center = LatLng(
+                  (minLat + maxLat) / 2,
+                  (minLng + maxLng) / 2,
                 );
-                // Fallback to center on the route
-                if (mounted && _mapController != null) {
-                  final center = LatLng(
-                    (minLat + maxLat) / 2,
-                    (minLng + maxLng) / 2,
-                  );
-                  _mapController!.moveCamera(
-                    CameraUpdate.newLatLngZoom(center, 13),
-                  );
-                }
-              },
-            )
-            .catchError((e) {
-              debugPrint('Error animating camera to show route: $e');
-              // Try a simpler camera update as fallback
-              if (mounted && _mapController != null) {
-                try {
-                  final center = LatLng(
-                    (minLat + maxLat) / 2,
-                    (minLng + maxLng) / 2,
-                  );
-                  _mapController!.moveCamera(
-                    CameraUpdate.newLatLngZoom(center, 13),
-                  );
-                } catch (e2) {
-                  debugPrint('Fallback camera update also failed: $e2');
-                }
-              }
-            });
-      } catch (e) {
-        debugPrint('Exception when fitting route on map: $e');
-      }
-    });
+                controller.moveCamera(CameraUpdate.newLatLngZoom(center, 13));
+              });
+        } catch (e) {
+          debugPrint('Exception fitting route: $e');
+        }
+      });
+    } catch (e) {
+      debugPrint('Error calculating bounds: $e');
+    }
   }
 
   // Calculate a test route (for development purposes)
@@ -409,9 +413,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       // Get current position
       Position? position;
-      final locationBlocState = context
-          .read<LocationBloc>()
-          .state; // Read before any await
+      final locationBlocState = context.read<LocationBloc>().state;
 
       if (locationBlocState is LocationTracking) {
         position = locationBlocState.currentPosition;
@@ -439,10 +441,13 @@ class _MapScreenState extends State<MapScreen> {
         throw Exception('Could not calculate route');
       }
 
+      if (!mounted) return;
+
       // Update state with new route
       setState(() {
         _currentRoute = route;
         _errorMessage = null;
+        _isLoading = false;
       });
 
       // Add markers for origin and destination
@@ -463,14 +468,17 @@ class _MapScreenState extends State<MapScreen> {
       _mappingService.addPolyline(id: 'route', points: route.polylinePoints);
 
       // Give the map some time to process the updates before fitting the route
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 500));
 
       // Show the entire route
       _fitRouteOnMap(route.polylinePoints);
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
-    } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 

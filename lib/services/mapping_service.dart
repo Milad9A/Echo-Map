@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../utils/navigation_utilities.dart';
-import '../utils/map_config.dart'; // Import the config
+import '../utils/map_config.dart';
 import 'location_service.dart';
 
 enum MapStatus { uninitialized, initializing, ready, error }
@@ -42,9 +42,11 @@ class MappingService {
   double _deviationThresholdMeters = 20.0; // Default deviation threshold
   bool _mapReady = false;
 
-  // Add a lock for controller operations
+  // Enhanced controller state tracking
+  final _controllerCompleter = Completer<GoogleMapController>();
   bool _controllerLocked = false;
   bool _controllerDisposed = false;
+  bool _controllerInitialized = false;
 
   // Add a completer to track when the map is fully initialized
   final Completer<bool> _mapInitCompleter = Completer<bool>();
@@ -66,11 +68,17 @@ class MappingService {
   CameraPosition? get currentCameraPosition => _currentCameraPosition;
   List<LatLng> get activeRoutePoints => _activeRoutePoints;
   bool get isMonitoringDeviation => _isMonitoringDeviation;
+
+  // Improved check for map readiness
   bool get isMapReady =>
       _mapReady &&
       mapController != null &&
+      _controllerInitialized &&
       !_controllerLocked &&
       !_controllerDisposed;
+
+  // New method to get a future for the controller
+  Future<GoogleMapController> get controller => _controllerCompleter.future;
 
   // New method to wait for map initialization
   Future<bool> waitForMapInitialization({
@@ -110,80 +118,103 @@ class MappingService {
     }
   }
 
-  // Set map controller when map is created
+  // Set map controller when map is created - improved implementation
   void setMapController(GoogleMapController controller) {
-    // Prevent setting a new controller if one already exists and is not disposed
-    if (mapController != null && !_controllerDisposed) {
-      debugPrint('Map controller already exists. Ignoring new controller.');
+    // Safety checks for controller state
+    if (_controllerDisposed) {
+      debugPrint('Cannot set controller: Previous controller was disposed');
       return;
     }
 
-    // Reset state flags
+    if (mapController != null && !_controllerCompleter.isCompleted) {
+      debugPrint(
+        'Controller already exists but completer not completed, completing now',
+      );
+      _controllerCompleter.complete(mapController);
+    }
+
+    // Reset controller state
     _controllerLocked = true;
-    _controllerDisposed = false;
+    _controllerInitialized = false;
     _mapReady = false;
 
-    // Clear previous controller reference
-    mapController = null;
+    // Assign the new controller
+    mapController = controller;
 
-    // Add a small delay before assigning the new controller to ensure clean state
-    Future.delayed(const Duration(milliseconds: 100), () {
-      mapController = controller;
+    // Complete the completer if not already completed
+    if (!_controllerCompleter.isCompleted) {
+      _controllerCompleter.complete(controller);
+    }
 
-      // Add a delay to ensure the controller is fully initialized
-      Future.delayed(const Duration(milliseconds: 1000), () {
-        if (mapController == controller) {
-          // Verify it's still the same controller
-          _mapReady = true;
-          _controllerLocked = false;
-          debugPrint(
-            'Google Maps controller initialized successfully and ready for use',
-          );
+    // Add a delay to ensure the controller is fully initialized
+    // This helps prevent race conditions
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mapController == controller) {
+        _controllerInitialized = true;
+        _mapReady = true;
+        _controllerLocked = false;
 
-          // Complete the initialization completer
-          if (!_mapInitCompleter.isCompleted) {
-            _mapInitCompleter.complete(true);
-          }
+        debugPrint(
+          'Google Maps controller initialized successfully and ready for use',
+        );
+
+        // Complete the initialization completer
+        if (!_mapInitCompleter.isCompleted) {
+          _mapInitCompleter.complete(true);
         }
-      });
+      }
     });
   }
 
-  // Center map on user's current location
-  Future<bool> centerOnUserLocation() async {
-    try {
-      // Ensure map is ready before attempting to center
-      if (!isMapReady) {
-        debugPrint('Map not ready yet, waiting for initialization...');
-        final isInitialized = await waitForMapInitialization();
-        if (!isInitialized) {
-          debugPrint('Map initialization timeout, cannot center on location');
-          return false;
+  // Center map on user's current location - improved with retry logic
+  Future<bool> centerOnUserLocation({int maxRetries = 3}) async {
+    int retryCount = 0;
+
+    while (retryCount < maxRetries) {
+      try {
+        // Ensure map is ready before attempting to center
+        if (!isMapReady) {
+          debugPrint('Map not ready yet, waiting for initialization...');
+          final isInitialized = await waitForMapInitialization();
+          if (!isInitialized) {
+            debugPrint('Map initialization timeout, retrying...');
+            retryCount++;
+            await Future.delayed(const Duration(seconds: 1));
+            continue;
+          }
         }
-      }
 
-      Position? position = _locationService.lastPosition;
+        Position? position = _locationService.lastPosition;
 
-      // If no last position, try to get current position
-      position ??= await _locationService.getCurrentPosition();
+        // If no last position, try to get current position
+        position ??= await _locationService.getCurrentPosition();
 
-      if (position != null) {
-        return await animateCameraToPosition(
-          LatLng(position.latitude, position.longitude),
+        if (position != null) {
+          return await animateCameraToPosition(
+            LatLng(position.latitude, position.longitude),
+            zoom: MapConfig.followUserZoom,
+          );
+        }
+
+        retryCount++;
+        await Future.delayed(const Duration(seconds: 1));
+      } catch (e) {
+        debugPrint(
+          'Error centering on user location (attempt $retryCount): $e',
         );
+        retryCount++;
+        await Future.delayed(const Duration(seconds: 1));
       }
-
-      return false;
-    } catch (e) {
-      debugPrint('Error centering on user location: $e');
-      return false;
     }
+
+    return false;
   }
 
-  // Animate camera to a specific position with enhanced error handling
+  // Animate camera to a specific position with enhanced error handling and retry logic
   Future<bool> animateCameraToPosition(
     LatLng position, {
-    double zoom = MapConfig.defaultZoom, // Use the config value here
+    double zoom = MapConfig.defaultZoom,
+    int maxRetries = 2,
   }) async {
     // Ensure map is initialized before attempting animation
     if (!isMapReady) {
@@ -208,6 +239,7 @@ class MappingService {
     }
 
     _controllerLocked = true;
+    int retryCount = 0;
 
     try {
       final cameraPosition = CameraPosition(target: position, zoom: zoom);
@@ -218,8 +250,8 @@ class MappingService {
         throw Exception('Controller became null unexpectedly');
       }
 
-      // Wait a short time before animating to avoid potential initialization issues
-      await Future.delayed(const Duration(milliseconds: 200));
+      // Add small delay to avoid potential issues right after initialization
+      await Future.delayed(const Duration(milliseconds: 300));
 
       // Check again if controller is valid
       if (_controllerDisposed ||
@@ -230,30 +262,53 @@ class MappingService {
         );
       }
 
-      // Use a timeout for the animation to avoid hanging
-      await controller
-          .animateCamera(CameraUpdate.newCameraPosition(cameraPosition))
-          .timeout(
-            const Duration(seconds: 3),
-            onTimeout: () {
-              debugPrint(
-                'Camera animation timed out, trying moveCamera instead',
+      bool success = false;
+      Exception? lastException;
+
+      // Try animation with retries
+      while (retryCount <= maxRetries && !success) {
+        try {
+          // Use a timeout for the animation to avoid hanging
+          await controller
+              .animateCamera(CameraUpdate.newCameraPosition(cameraPosition))
+              .timeout(
+                const Duration(seconds: 3),
+                onTimeout: () {
+                  debugPrint(
+                    'Camera animation timed out, trying moveCamera instead',
+                  );
+                  try {
+                    controller.moveCamera(
+                      CameraUpdate.newCameraPosition(cameraPosition),
+                    );
+                    success = true;
+                  } catch (e) {
+                    debugPrint('moveCamera fallback also failed: $e');
+                    success = false;
+                  }
+                },
               );
-              try {
-                controller.moveCamera(
-                  CameraUpdate.newCameraPosition(cameraPosition),
-                );
-              } catch (e) {
-                debugPrint('moveCamera fallback also failed: $e');
-              }
-              return;
-            },
-          );
 
-      _currentCameraPosition = cameraPosition;
-      _cameraController.add(cameraPosition);
+          success = true;
+        } catch (e) {
+          lastException = e is Exception ? e : Exception(e.toString());
+          debugPrint('Animation attempt $retryCount failed: $e');
+          retryCount++;
 
-      return true;
+          // Small delay before retry
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+
+      if (success) {
+        _currentCameraPosition = cameraPosition;
+        _cameraController.add(cameraPosition);
+        return true;
+      } else if (lastException != null) {
+        throw lastException;
+      }
+
+      return false;
     } catch (e) {
       debugPrint('Error animating camera: $e');
 
@@ -459,34 +514,38 @@ class MappingService {
     }
   }
 
-  // Dispose of resources
+  // Dispose of resources with improved safety
   void dispose() {
     stopDeviationMonitoring();
 
     // Mark controller as disposed first to prevent new operations
     _controllerDisposed = true;
+    _mapReady = false;
+    _controllerInitialized = false;
 
-    // Make sure we're not trying to dispose the controller while it's locked
-    if (mapController != null && !_controllerLocked) {
+    // Cancel any pending futures
+    if (!_mapInitCompleter.isCompleted) {
+      _mapInitCompleter.completeError('Service disposed');
+    }
+
+    // Handle controller disposal with extra care
+    final localController = mapController;
+    if (localController != null && !_controllerLocked) {
       try {
-        mapController!.dispose();
-      } catch (e) {
-        debugPrint('Error disposing map controller: $e');
-      }
-      mapController = null;
-    } else if (_controllerLocked) {
-      // Schedule controller disposal after lock is released
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mapController != null) {
+        // Wrap in a future to avoid blocking
+        Future.microtask(() {
           try {
-            mapController!.dispose();
+            localController.dispose();
           } catch (e) {
             debugPrint('Error in delayed disposal of map controller: $e');
           }
-          mapController = null;
-        }
-      });
+        });
+      } catch (e) {
+        debugPrint('Error queuing controller disposal: $e');
+      }
     }
+
+    mapController = null;
 
     // Close stream controllers
     _statusController.close();
@@ -494,5 +553,16 @@ class MappingService {
     _markersController.close();
     _polylinesController.close();
     _routeDeviationController.close();
+  }
+
+  // Create a new controller completer (for reinitialization)
+  void resetControllerCompleter() {
+    if (!_controllerCompleter.isCompleted) {
+      // Complete with error to avoid hanging futures
+      _controllerCompleter.completeError('Controller reset');
+    }
+
+    // No need to create a new completer - this would lose existing listeners
+    // Instead, we'll handle this in setMapController
   }
 }
