@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../models/route_information.dart';
 
 abstract class NavigationState extends Equatable {
   const NavigationState();
@@ -7,46 +9,56 @@ abstract class NavigationState extends Equatable {
   List<Object> get props => [];
 }
 
-class NavigationInitial extends NavigationState {}
+/// Idle state - no active navigation
+class NavigationIdle extends NavigationState {}
 
+/// Active navigation state - following a route
 class NavigationActive extends NavigationState {
   final String destination;
-  final double currentLatitude;
-  final double currentLongitude;
+  final LatLng currentPosition;
+  final RouteInformation route;
   final bool isOnRoute;
-  final String? nextManeuver;
+  final RouteStep? nextStep;
+  final int? distanceToNextStep;
   final int? distanceToDestination;
   final int? estimatedTimeInSeconds;
+  final DateTime lastUpdated;
 
-  const NavigationActive({
+  NavigationActive({
     required this.destination,
-    required this.currentLatitude,
-    required this.currentLongitude,
+    required this.currentPosition,
+    required this.route,
     this.isOnRoute = true,
-    this.nextManeuver,
+    this.nextStep,
+    this.distanceToNextStep,
     this.distanceToDestination,
     this.estimatedTimeInSeconds,
-  });
+    DateTime? lastUpdated,
+  }) : lastUpdated = lastUpdated ?? DateTime.now();
 
   NavigationActive copyWith({
     String? destination,
-    double? currentLatitude,
-    double? currentLongitude,
+    LatLng? currentPosition,
+    RouteInformation? route,
     bool? isOnRoute,
-    String? nextManeuver,
+    RouteStep? nextStep,
+    int? distanceToNextStep,
     int? distanceToDestination,
     int? estimatedTimeInSeconds,
+    DateTime? lastUpdated,
   }) {
     return NavigationActive(
       destination: destination ?? this.destination,
-      currentLatitude: currentLatitude ?? this.currentLatitude,
-      currentLongitude: currentLongitude ?? this.currentLongitude,
+      currentPosition: currentPosition ?? this.currentPosition,
+      route: route ?? this.route,
       isOnRoute: isOnRoute ?? this.isOnRoute,
-      nextManeuver: nextManeuver ?? this.nextManeuver,
+      nextStep: nextStep ?? this.nextStep,
+      distanceToNextStep: distanceToNextStep ?? this.distanceToNextStep,
       distanceToDestination:
           distanceToDestination ?? this.distanceToDestination,
       estimatedTimeInSeconds:
           estimatedTimeInSeconds ?? this.estimatedTimeInSeconds,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
 
@@ -77,22 +89,78 @@ class NavigationActive extends NavigationState {
   @override
   List<Object> get props => [
     destination,
-    currentLatitude,
-    currentLongitude,
+    currentPosition,
+    route,
     isOnRoute,
-    if (nextManeuver != null) nextManeuver!,
+    lastUpdated,
+    if (nextStep != null) nextStep!,
+    if (distanceToNextStep != null) distanceToNextStep!,
     if (distanceToDestination != null) distanceToDestination!,
     if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
   ];
 }
 
-class NavigationCompleted extends NavigationState {}
+/// Rerouting state - calculating a new route
+class NavigationRerouting extends NavigationState {
+  final LatLng currentPosition;
+  final String destination;
+  final double deviationDistance;
+  final DateTime startedAt;
 
-class NavigationError extends NavigationState {
-  final String message;
-
-  const NavigationError(this.message);
+  NavigationRerouting({
+    required this.currentPosition,
+    required this.destination,
+    required this.deviationDistance,
+    DateTime? startedAt,
+  }) : startedAt = startedAt ?? DateTime.now();
 
   @override
-  List<Object> get props => [message];
+  List<Object> get props => [
+    currentPosition,
+    destination,
+    deviationDistance,
+    startedAt,
+  ];
+}
+
+/// Arrived state - destination reached
+class NavigationArrived extends NavigationState {
+  final String destination;
+  final LatLng finalPosition;
+  final DateTime arrivedAt;
+  final int? totalDistance;
+  final int? totalDuration;
+
+  NavigationArrived({
+    required this.destination,
+    required this.finalPosition,
+    this.totalDistance,
+    this.totalDuration,
+    DateTime? arrivedAt,
+  }) : arrivedAt = arrivedAt ?? DateTime.now();
+
+  @override
+  List<Object> get props => [
+    destination,
+    finalPosition,
+    arrivedAt,
+    if (totalDistance != null) totalDistance!,
+    if (totalDuration != null) totalDuration!,
+  ];
+}
+
+/// Navigation error state
+class NavigationError extends NavigationState {
+  final String message;
+  final DateTime occurredAt;
+  final bool isFatal;
+
+  NavigationError({
+    required this.message,
+    this.isFatal = false,
+    DateTime? occurredAt,
+  }) : occurredAt = occurredAt ?? DateTime.now();
+
+  @override
+  List<Object> get props => [message, occurredAt, isFatal];
 }

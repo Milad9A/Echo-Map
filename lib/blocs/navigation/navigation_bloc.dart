@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'dart:math';
 import '../../models/route_information.dart';
 import '../../services/location_service.dart';
 import '../../services/mapping_service.dart';
-import '../../services/turn_detection_service.dart';
+import '../../services/navigation_monitoring_service.dart';
 import '../../services/vibration_service.dart';
+import '../../services/routing_service.dart';
 import 'navigation_event.dart';
 import 'navigation_state.dart';
 
@@ -14,42 +14,173 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
   final VibrationService _vibrationService = VibrationService();
   final MappingService _mappingService = MappingService();
   final LocationService _locationService = LocationService();
-  final TurnDetectionService _turnDetectionService = TurnDetectionService();
+  final NavigationMonitoringService _navigationService =
+      NavigationMonitoringService();
+  final RoutingService _routingService = RoutingService();
 
+  // Subscriptions
+  StreamSubscription<NavigationStatus>? _statusSubscription;
+  StreamSubscription<LatLng>? _positionSubscription;
   StreamSubscription<double>? _deviationSubscription;
-  StreamSubscription<String>? _turnDirectionSubscription;
-  RouteInformation? _currentRoute;
+  StreamSubscription<RouteStep>? _upcomingTurnSubscription;
+  StreamSubscription<LatLng>? _destinationReachedSubscription;
+  StreamSubscription<bool>? _reroutingSubscription;
+  StreamSubscription<String>? _errorSubscription;
 
-  // Constants for navigation
-  static const double _routeDeviationThreshold = 20.0; // meters
-  static const double _destinationReachedThreshold = 15.0; // meters
-
-  NavigationBloc() : super(NavigationInitial()) {
+  NavigationBloc() : super(NavigationIdle()) {
     on<StartNavigation>(_onStartNavigation);
+    on<StartNavigatingRoute>(_onStartNavigatingRoute);
     on<StopNavigation>(_onStopNavigation);
+    on<PauseNavigation>(_onPauseNavigation);
+    on<ResumeNavigation>(_onResumeNavigation);
     on<UpdateLocation>(_onUpdateLocation);
     on<ApproachingTurn>(_onApproachingTurn);
+    on<TurnCompleted>(_onTurnCompleted);
+    on<StartRerouting>(_onStartRerouting);
+    on<ReroutingComplete>(_onReroutingComplete);
+    on<ReroutingFailed>(_onReroutingFailed);
     on<OffRoute>(_onOffRoute);
     on<OnRoute>(_onOnRoute);
-    on<ReachedDestination>(_onReachedDestination);
+    on<DestinationReached>(_onDestinationReached);
     on<ApproachingCrossing>(_onApproachingCrossing);
     on<ApproachingHazard>(_onApproachingHazard);
     on<RouteDeviation>(_onRouteDeviation);
-    on<StartNavigatingRoute>(_onStartNavigatingRoute);
+    on<_NavigationErrorReceived>(_onNavigationErrorReceived);
+
+    // Subscribe to navigation service events
+    _subscribeToNavigationService();
   }
 
-  void _onStartNavigation(
+  void _subscribeToNavigationService() {
+    // Subscribe to navigation status changes
+    _statusSubscription = _navigationService.statusStream.listen((status) {
+      _handleNavigationStatusChange(status);
+    });
+
+    // Subscribe to position updates
+    _positionSubscription = _navigationService.positionStream.listen((
+      position,
+    ) {
+      add(UpdateLocation(position));
+    });
+
+    // Subscribe to route deviation events
+    _deviationSubscription = _navigationService.deviationStream.listen((
+      deviation,
+    ) {
+      if (_navigationService.currentPosition != null) {
+        add(
+          RouteDeviation(
+            position: _navigationService.currentPosition!,
+            deviationDistance: deviation,
+          ),
+        );
+      }
+    });
+
+    // Subscribe to upcoming turn events
+    _upcomingTurnSubscription = _navigationService.upcomingTurnStream.listen((
+      step,
+    ) {
+      add(ApproachingTurn(turnDirection: step.turnDirection, step: step));
+    });
+
+    // Subscribe to destination reached events
+    _destinationReachedSubscription = _navigationService
+        .destinationReachedStream
+        .listen((position) {
+          add(DestinationReached(position));
+        });
+
+    // Subscribe to rerouting events
+    _reroutingSubscription = _navigationService.reroutingStream.listen((
+      isRerouting,
+    ) {
+      if (isRerouting && _navigationService.currentPosition != null) {
+        add(
+          StartRerouting(
+            currentPosition: _navigationService.currentPosition!,
+            deviationDistance: 0.0, // We don't have this value from the stream
+          ),
+        );
+      }
+    });
+    // Subscribe to error events
+    _errorSubscription = _navigationService.errorStream.listen((errorMessage) {
+      add(_NavigationErrorReceived(errorMessage));
+    });
+  }
+
+  void _handleNavigationStatusChange(NavigationStatus status) {
+    switch (status) {
+      case NavigationStatus.idle:
+        if (state is! NavigationIdle) {
+          add(StopNavigation());
+        }
+        break;
+      case NavigationStatus.active:
+        // Active state is handled by position updates
+        break;
+      case NavigationStatus.rerouting:
+        if (state is NavigationActive &&
+            _navigationService.currentPosition != null) {
+          add(
+            StartRerouting(
+              currentPosition: _navigationService.currentPosition!,
+              deviationDistance: 0.0, // Default value
+            ),
+          );
+        }
+        break;
+      case NavigationStatus.arrived:
+        if (state is NavigationActive &&
+            _navigationService.currentPosition != null) {
+          add(DestinationReached(_navigationService.currentPosition!));
+        }
+        break;
+      case NavigationStatus.error:
+        // Error state is handled by error subscription
+        break;
+    }
+  }
+
+  Future<void> _onStartNavigation(
     StartNavigation event,
     Emitter<NavigationState> emit,
-  ) {
-    // Will implement actual navigation logic
-    emit(
-      NavigationActive(
-        destination: event.destination,
-        currentLatitude: 0.0,
-        currentLongitude: 0.0,
-      ),
-    );
+  ) async {
+    try {
+      // Get current position
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) {
+        emit(NavigationError(message: "Couldn't get current location"));
+        return;
+      }
+
+      // TODO: Implement geocoding to get destination coordinates
+      // For now, just use a placeholder destination 1km north
+      final originLatLng = LatLng(position.latitude, position.longitude);
+      final destinationLatLng = LatLng(
+        position.latitude + 0.01, // Roughly 1km north
+        position.longitude,
+      );
+
+      // Calculate route
+      final route = await _routingService.calculateRoute(
+        originLatLng,
+        destinationLatLng,
+        mode: TravelMode.walking,
+      );
+
+      if (route == null) {
+        emit(NavigationError(message: "Couldn't calculate route"));
+        return;
+      }
+
+      // Start navigation with the calculated route
+      add(StartNavigatingRoute(route));
+    } catch (e) {
+      emit(NavigationError(message: "Error starting navigation: $e"));
+    }
   }
 
   Future<void> _onStartNavigatingRoute(
@@ -57,112 +188,115 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     Emitter<NavigationState> emit,
   ) async {
     try {
-      _currentRoute = event.route;
+      // Start navigation monitoring
+      final success = await _navigationService.startNavigation(event.route);
 
-      // Start location updates if not already active
-      if (!_locationService.isTracking) {
-        await _locationService.startLocationUpdates();
+      if (!success) {
+        emit(NavigationError(message: "Failed to start navigation monitoring"));
+        return;
       }
 
-      // Start monitoring route deviation
-      await _mappingService.startDeviationMonitoring(
-        thresholdMeters: _routeDeviationThreshold,
+      // Get current position
+      final position = await _locationService.getCurrentPosition();
+      if (position == null) {
+        _navigationService.stopNavigation();
+        emit(NavigationError(message: "Couldn't get current location"));
+        return;
+      }
+
+      // Update the map with the route
+      _mappingService.clearMarkers();
+      _mappingService.clearPolylines();
+
+      _mappingService.addMarker(
+        id: 'origin',
+        position: event.route.origin.position,
+        title: 'Start',
       );
 
-      // Start turn detection
-      await _turnDetectionService.startTurnDetection(event.route);
+      _mappingService.addMarker(
+        id: 'destination',
+        position: event.route.destination.position,
+        title: event.route.destination.name,
+      );
 
-      // Subscribe to deviation notifications
-      _deviationSubscription = _mappingService.routeDeviationStream.listen((
-        deviation,
-      ) {
-        if (deviation > 0) {
-          add(RouteDeviation(deviation));
-        } else if (state is NavigationActive &&
-            !(state as NavigationActive).isOnRoute) {
-          add(OnRoute());
-        }
-      });
+      _mappingService.addPolyline(
+        id: 'route',
+        points: event.route.polylinePoints,
+      );
 
-      // Subscribe to turn direction notifications
-      _turnDirectionSubscription = _turnDetectionService.turnDirectionStream
-          .listen((direction) {
-            if (direction.startsWith('approaching_')) {
-              final turnType = direction.substring('approaching_'.length);
-              add(ApproachingTurn(turnType));
-            }
-          });
-
-      // Initial state with origin and destination
-      final origin = event.route.origin;
-      final destination = event.route.destination;
-
+      // Initialize active navigation state
+      final currentPosition = LatLng(position.latitude, position.longitude);
       emit(
         NavigationActive(
-          destination: destination.name,
-          currentLatitude: origin.position.latitude,
-          currentLongitude: origin.position.longitude,
-          isOnRoute: true,
+          destination: event.route.destination.name,
+          currentPosition: currentPosition,
+          route: event.route,
           distanceToDestination: event.route.distanceMeters,
           estimatedTimeInSeconds: event.route.durationSeconds,
         ),
       );
 
-      // Initial on-route feedback
+      // Provide initial feedback
       _vibrationService.onRouteFeedback();
     } catch (e) {
-      emit(NavigationError('Failed to start navigation: $e'));
+      emit(NavigationError(message: "Error starting navigation: $e"));
     }
   }
 
-  void _onStopNavigation(StopNavigation event, Emitter<NavigationState> emit) {
-    _cleanupSubscriptions();
-    _mappingService.stopDeviationMonitoring();
-    _turnDetectionService.stopTurnDetection();
+  Future<void> _onStopNavigation(
+    StopNavigation event,
+    Emitter<NavigationState> emit,
+  ) async {
+    await _navigationService.stopNavigation();
+    _mappingService.clearMarkers();
+    _mappingService.clearPolylines();
     _vibrationService.stopVibration();
-    _currentRoute = null;
-    emit(NavigationInitial());
+    emit(NavigationIdle());
+  }
+
+  void _onPauseNavigation(
+    PauseNavigation event,
+    Emitter<NavigationState> emit,
+  ) {
+    // Implementation for pausing navigation
+    // This would typically pause location updates and feedback
+    // but retain the current route and state
+  }
+
+  void _onResumeNavigation(
+    ResumeNavigation event,
+    Emitter<NavigationState> emit,
+  ) {
+    // Implementation for resuming navigation
+    // This would restart location updates and feedback
   }
 
   void _onUpdateLocation(UpdateLocation event, Emitter<NavigationState> emit) {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
 
-      // Check if we've reached the destination
-      if (_currentRoute != null) {
-        final currentPosition = LatLng(event.latitude, event.longitude);
-        final distanceToDestination = _currentRoute!.getRemainingDistance(
-          currentPosition,
-        );
-
-        // Update state with new position and remaining distance
-        emit(
-          currentState.copyWith(
-            currentLatitude: event.latitude,
-            currentLongitude: event.longitude,
-            distanceToDestination: distanceToDestination,
-          ),
-        );
-
-        // Check if we've reached the destination
-        final destinationPosition = _currentRoute!.destination.position;
-        final directDistance = _calculateDistance(
-          currentPosition,
-          destinationPosition,
-        );
-
-        if (directDistance <= _destinationReachedThreshold) {
-          add(ReachedDestination());
-        }
+      // Update remaining distance if route is available
+      int? remainingDistance;
+      if (_navigationService.distanceToDestination != null) {
+        remainingDistance = _navigationService.distanceToDestination;
       } else {
-        // Just update position if no route is active
-        emit(
-          currentState.copyWith(
-            currentLatitude: event.latitude,
-            currentLongitude: event.longitude,
-          ),
+        remainingDistance = currentState.route.getRemainingDistance(
+          event.position,
         );
       }
+
+      // Update state with new position and info
+      emit(
+        currentState.copyWith(
+          currentPosition: event.position,
+          distanceToDestination: remainingDistance,
+          estimatedTimeInSeconds: _navigationService.estimatedTimeRemaining,
+          isOnRoute: _navigationService.isOnRoute,
+          nextStep: _navigationService.nextStep,
+          lastUpdated: DateTime.now(),
+        ),
+      );
     }
   }
 
@@ -173,114 +307,207 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
 
-      // Provide appropriate vibration feedback based on turn direction
-      switch (event.turnDirection) {
-        case 'left':
-          _vibrationService.leftTurnFeedback();
-          break;
-        case 'right':
-          _vibrationService.rightTurnFeedback();
-          break;
-        case 'uturn':
-          _vibrationService.uTurnFeedback();
-          break;
-        default:
-          _vibrationService.approachingTurnFeedback();
-      }
+      // Update state with next step information
+      emit(
+        currentState.copyWith(
+          nextStep: event.step,
+          lastUpdated: DateTime.now(),
+        ),
+      );
+    }
+  }
 
-      emit(currentState.copyWith(nextManeuver: event.turnDirection));
+  void _onTurnCompleted(TurnCompleted event, Emitter<NavigationState> emit) {
+    if (state is NavigationActive) {
+      final currentState = state as NavigationActive;
+
+      // If this was our next step, clear it
+      if (currentState.nextStep == event.completedStep) {
+        emit(
+          currentState.copyWith(nextStep: null, lastUpdated: DateTime.now()),
+        );
+      }
+    }
+  }
+
+  void _onStartRerouting(StartRerouting event, Emitter<NavigationState> emit) {
+    if (state is NavigationActive) {
+      final currentState = state as NavigationActive;
+
+      emit(
+        NavigationRerouting(
+          currentPosition: event.currentPosition,
+          destination: currentState.destination,
+          deviationDistance: event.deviationDistance,
+        ),
+      );
+
+      // In a real implementation, we would start recalculating the route here
+      // For now, we'll just rely on the navigation service
+    }
+  }
+
+  void _onReroutingComplete(
+    ReroutingComplete event,
+    Emitter<NavigationState> emit,
+  ) {
+    if (state is NavigationRerouting &&
+        _navigationService.currentPosition != null) {
+      // Update the map with the new route
+      _mappingService.clearPolylines();
+      _mappingService.addPolyline(
+        id: 'route',
+        points: event.newRoute.polylinePoints,
+      );
+
+      // Resume active navigation with the new route
+      emit(
+        NavigationActive(
+          destination: event.newRoute.destination.name,
+          currentPosition: _navigationService.currentPosition!,
+          route: event.newRoute,
+          isOnRoute: true,
+          distanceToDestination: event.newRoute.distanceMeters,
+          estimatedTimeInSeconds: event.newRoute.durationSeconds,
+        ),
+      );
+
+      // Provide feedback that we're back on route
+      _vibrationService.onRouteFeedback();
+    }
+  }
+
+  void _onReroutingFailed(
+    ReroutingFailed event,
+    Emitter<NavigationState> emit,
+  ) {
+    if (state is NavigationRerouting) {
+      emit(
+        NavigationError(
+          message: "Rerouting failed: ${event.reason}",
+          isFatal: false,
+        ),
+      );
     }
   }
 
   void _onOffRoute(OffRoute event, Emitter<NavigationState> emit) {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
-      _vibrationService.wrongDirectionFeedback();
-      emit(currentState.copyWith(isOnRoute: false));
+
+      // Only update if we're currently marked as on route
+      if (currentState.isOnRoute) {
+        emit(
+          currentState.copyWith(
+            isOnRoute: false,
+            currentPosition: event.position,
+            lastUpdated: DateTime.now(),
+          ),
+        );
+
+        // The vibration feedback is handled by the navigation service
+      }
     }
   }
 
   void _onOnRoute(OnRoute event, Emitter<NavigationState> emit) {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
+
+      // Only update if we're currently marked as off route
       if (!currentState.isOnRoute) {
-        _vibrationService.onRouteFeedback();
-        emit(currentState.copyWith(isOnRoute: true));
+        emit(
+          currentState.copyWith(
+            isOnRoute: true,
+            currentPosition: event.position,
+            lastUpdated: DateTime.now(),
+          ),
+        );
+
+        // The vibration feedback is handled by the navigation service
       }
     }
   }
 
-  void _onReachedDestination(
-    ReachedDestination event,
+  void _onDestinationReached(
+    DestinationReached event,
     Emitter<NavigationState> emit,
   ) {
-    _vibrationService.destinationReachedFeedback();
-    _cleanupSubscriptions();
-    _mappingService.stopDeviationMonitoring();
-    _turnDetectionService.stopTurnDetection();
-    emit(NavigationCompleted());
+    if (state is NavigationActive) {
+      final currentState = state as NavigationActive;
+
+      emit(
+        NavigationArrived(
+          destination: currentState.destination,
+          finalPosition: event.position,
+          totalDistance: currentState.route.distanceMeters,
+          totalDuration: currentState.route.durationSeconds,
+        ),
+      );
+
+      // The vibration feedback is handled by the navigation service
+    }
   }
 
   void _onApproachingCrossing(
     ApproachingCrossing event,
     Emitter<NavigationState> emit,
   ) {
-    if (state is NavigationActive) {
-      _vibrationService.crossingStreetFeedback();
-    }
+    _vibrationService.crossingStreetFeedback();
   }
 
   void _onApproachingHazard(
     ApproachingHazard event,
     Emitter<NavigationState> emit,
   ) {
-    if (state is NavigationActive) {
-      _vibrationService.hazardWarningFeedback();
-    }
+    _vibrationService.hazardWarningFeedback();
   }
 
   void _onRouteDeviation(RouteDeviation event, Emitter<NavigationState> emit) {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
 
-      // Only process if currently on route to avoid duplicate notifications
-      if (currentState.isOnRoute) {
-        add(OffRoute());
-      }
+      // Update state to reflect deviation
+      emit(
+        currentState.copyWith(
+          isOnRoute: false,
+          currentPosition: event.position,
+          lastUpdated: DateTime.now(),
+        ),
+      );
+
+      // Check if we should trigger rerouting
+      // This is now handled by the navigation service
     }
   }
 
-  // Helper method to clean up subscriptions
-  void _cleanupSubscriptions() {
-    _deviationSubscription?.cancel();
-    _deviationSubscription = null;
-
-    _turnDirectionSubscription?.cancel();
-    _turnDirectionSubscription = null;
-  }
-
-  // Calculate distance between two points
-  double _calculateDistance(LatLng point1, LatLng point2) {
-    const double earthRadius = 6371000; // meters
-
-    final lat1 = point1.latitude * (3.141592653589793 / 180);
-    final lat2 = point2.latitude * (3.141592653589793 / 180);
-    final dLat =
-        (point2.latitude - point1.latitude) * (3.141592653589793 / 180);
-    final dLon =
-        (point2.longitude - point1.longitude) * (3.141592653589793 / 180);
-    final a =
-        pow(sin(dLat / 2), 2) + pow(sin(dLon / 2), 2) * cos(lat1) * cos(lat2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-    return earthRadius * c;
+  void _onNavigationErrorReceived(
+    _NavigationErrorReceived event,
+    Emitter<NavigationState> emit,
+  ) {
+    emit(NavigationError(message: event.message));
   }
 
   @override
   Future<void> close() {
-    _cleanupSubscriptions();
-    _mappingService.stopDeviationMonitoring();
-    _turnDetectionService.stopTurnDetection();
+    // Clean up subscriptions
+    _statusSubscription?.cancel();
+    _positionSubscription?.cancel();
+    _deviationSubscription?.cancel();
+    _upcomingTurnSubscription?.cancel();
+    _destinationReachedSubscription?.cancel();
+    _reroutingSubscription?.cancel();
+    _errorSubscription?.cancel();
+
+    // Stop navigation
+    _navigationService.stopNavigation();
+
     return super.close();
   }
+}
+
+// Private event for internal error handling
+class _NavigationErrorReceived extends NavigationEvent {
+  final String message;
+  const _NavigationErrorReceived(this.message);
 }

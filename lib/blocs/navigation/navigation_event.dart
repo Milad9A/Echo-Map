@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/route_information.dart';
 
 abstract class NavigationEvent extends Equatable {
@@ -28,47 +29,134 @@ class StartNavigatingRoute extends NavigationEvent {
 
 class StopNavigation extends NavigationEvent {}
 
-class UpdateLocation extends NavigationEvent {
-  final double latitude;
-  final double longitude;
+class PauseNavigation extends NavigationEvent {}
 
-  const UpdateLocation({required this.latitude, required this.longitude});
+class ResumeNavigation extends NavigationEvent {}
+
+class UpdateLocation extends NavigationEvent {
+  final LatLng position;
+
+  const UpdateLocation(this.position);
 
   @override
-  List<Object> get props => [latitude, longitude];
+  List<Object> get props => [position];
 }
 
 class ApproachingTurn extends NavigationEvent {
   final String turnDirection; // "left", "right", "uturn"
+  final RouteStep step;
 
-  const ApproachingTurn(this.turnDirection);
+  const ApproachingTurn({
+    required this.turnDirection,
+    required this.step,
+  });
 
   @override
-  List<Object> get props => [turnDirection];
+  List<Object> get props => [turnDirection, step];
 }
 
-class OffRoute extends NavigationEvent {}
+class TurnCompleted extends NavigationEvent {
+  final RouteStep completedStep;
 
-class OnRoute extends NavigationEvent {}
+  const TurnCompleted(this.completedStep);
 
-class ReachedDestination extends NavigationEvent {}
+  @override
+  List<Object> get props => [completedStep];
+}
 
-class ApproachingCrossing extends NavigationEvent {}
+class StartRerouting extends NavigationEvent {
+  final LatLng currentPosition;
+  final double deviationDistance;
+
+  const StartRerouting({
+    required this.currentPosition,
+    required this.deviationDistance,
+  });
+
+  @override
+  List<Object> get props => [currentPosition, deviationDistance];
+}
+
+class ReroutingComplete extends NavigationEvent {
+  final RouteInformation newRoute;
+
+  const ReroutingComplete(this.newRoute);
+
+  @override
+  List<Object> get props => [newRoute];
+}
+
+class ReroutingFailed extends NavigationEvent {
+  final String reason;
+
+  const ReroutingFailed(this.reason);
+
+  @override
+  List<Object> get props => [reason];
+}
+
+class OffRoute extends NavigationEvent {
+  final LatLng position;
+  final double deviationDistance;
+
+  const OffRoute({
+    required this.position,
+    required this.deviationDistance,
+  });
+
+  @override
+  List<Object> get props => [position, deviationDistance];
+}
+
+class OnRoute extends NavigationEvent {
+  final LatLng position;
+
+  const OnRoute(this.position);
+
+  @override
+  List<Object> get props => [position];
+}
+
+class DestinationReached extends NavigationEvent {
+  final LatLng position;
+
+  const DestinationReached(this.position);
+
+  @override
+  List<Object> get props => [position];
+}
+
+class ApproachingCrossing extends NavigationEvent {
+  final LatLng position;
+
+  const ApproachingCrossing(this.position);
+
+  @override
+  List<Object> get props => [position];
+}
 
 class ApproachingHazard extends NavigationEvent {
   final String hazardType;
+  final LatLng position;
 
-  const ApproachingHazard(this.hazardType);
+  const ApproachingHazard({
+    required this.hazardType,
+    required this.position,
+  });
 
   @override
-  List<Object> get props => [hazardType];
+  List<Object> get props => [hazardType, position];
 }
 
 class RouteDeviation extends NavigationEvent {
+  final LatLng position;
   final double deviationDistance;
 
-  const RouteDeviation(this.deviationDistance);
+  const RouteDeviation({
+    required this.position,
+    required this.deviationDistance,
+  });
 
   @override
-  List<Object> get props => [deviationDistance];
+  List<Object> get props => [position, deviationDistance];
 }
