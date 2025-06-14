@@ -67,8 +67,6 @@ class Waypoint extends Equatable {
         return 'Crossing';
       case WaypointType.landmark:
         return 'Landmark';
-      default:
-        return 'Waypoint';
     }
   }
 

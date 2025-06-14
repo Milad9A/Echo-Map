@@ -15,6 +15,8 @@ class NavigationActive extends NavigationState {
   final double currentLongitude;
   final bool isOnRoute;
   final String? nextManeuver;
+  final int? distanceToDestination;
+  final int? estimatedTimeInSeconds;
 
   const NavigationActive({
     required this.destination,
@@ -22,6 +24,8 @@ class NavigationActive extends NavigationState {
     required this.currentLongitude,
     this.isOnRoute = true,
     this.nextManeuver,
+    this.distanceToDestination,
+    this.estimatedTimeInSeconds,
   });
 
   NavigationActive copyWith({
@@ -30,6 +34,8 @@ class NavigationActive extends NavigationState {
     double? currentLongitude,
     bool? isOnRoute,
     String? nextManeuver,
+    int? distanceToDestination,
+    int? estimatedTimeInSeconds,
   }) {
     return NavigationActive(
       destination: destination ?? this.destination,
@@ -37,7 +43,35 @@ class NavigationActive extends NavigationState {
       currentLongitude: currentLongitude ?? this.currentLongitude,
       isOnRoute: isOnRoute ?? this.isOnRoute,
       nextManeuver: nextManeuver ?? this.nextManeuver,
+      distanceToDestination:
+          distanceToDestination ?? this.distanceToDestination,
+      estimatedTimeInSeconds:
+          estimatedTimeInSeconds ?? this.estimatedTimeInSeconds,
     );
+  }
+
+  String get distanceText {
+    if (distanceToDestination == null) return 'Unknown';
+
+    if (distanceToDestination! < 1000) {
+      return '$distanceToDestination m';
+    } else {
+      final km = distanceToDestination! / 1000.0;
+      return '${km.toStringAsFixed(1)} km';
+    }
+  }
+
+  String get timeText {
+    if (estimatedTimeInSeconds == null) return 'Unknown';
+
+    final minutes = (estimatedTimeInSeconds! / 60).round();
+    if (minutes < 60) {
+      return '$minutes min';
+    } else {
+      final hours = minutes / 60;
+      final remainingMinutes = minutes % 60;
+      return '${hours.floor()} hr ${remainingMinutes > 0 ? '$remainingMinutes min' : ''}';
+    }
   }
 
   @override
@@ -47,6 +81,8 @@ class NavigationActive extends NavigationState {
     currentLongitude,
     isOnRoute,
     if (nextManeuver != null) nextManeuver!,
+    if (distanceToDestination != null) distanceToDestination!,
+    if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
   ];
 }
 

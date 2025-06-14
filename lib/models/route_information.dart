@@ -1,7 +1,6 @@
-import 'dart:math';
-
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../utils/navigation_utilities.dart';
 import 'waypoint.dart';
 
 class RouteInformation extends Equatable {
@@ -64,7 +63,10 @@ class RouteInformation extends Equatable {
 
     for (int i = 0; i < steps.length; i++) {
       final step = steps[i];
-      final distance = _calculateDistance(position, step.startLocation);
+      final distance = NavigationUtilities.calculateDistance(
+        position,
+        step.startLocation,
+      );
 
       if (distance < closestDistance) {
         closestDistance = distance;
@@ -81,22 +83,79 @@ class RouteInformation extends Equatable {
     return null;
   }
 
-  // Calculate distance between two points (simplified version)
-  double _calculateDistance(LatLng point1, LatLng point2) {
-    const double earthRadius = 6371000; // meters
+  // Find the next turn after a specific position
+  RouteStep? getNextTurnAfter(LatLng position) {
+    // Find the closest step first
+    final nextStep = getNextStepAfter(position);
+    if (nextStep == null) return null;
 
-    final lat1 = point1.latitude * (3.141592653589793 / 180);
-    final lat2 = point2.latitude * (3.141592653589793 / 180);
-    final dLat =
-        (point2.latitude - point1.latitude) * (3.141592653589793 / 180);
-    final dLon =
-        (point2.longitude - point1.longitude) * (3.141592653589793 / 180);
+    // Check if this step is a turn
+    if (nextStep.isTurn) {
+      return nextStep;
+    }
 
-    final a =
-        pow(sin(dLat / 2), 2) + pow(sin(dLon / 2), 2) * cos(lat1) * cos(lat2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    // If not, look ahead for the next turn
+    final nextStepIndex = steps.indexOf(nextStep);
+    if (nextStepIndex < 0) return null;
 
-    return earthRadius * c;
+    // Look ahead for a step with a turn maneuver
+    for (int i = nextStepIndex + 1; i < steps.length; i++) {
+      if (steps[i].isTurn) {
+        return steps[i];
+      }
+    }
+
+    return null;
+  }
+
+  // Get the remaining distance from a position to the destination
+  int getRemainingDistance(LatLng position) {
+    // Find the closest point on the route to the current position
+    final closestPoint = NavigationUtilities.findClosestPointOnRoute(
+      position,
+      polylinePoints,
+    );
+
+    // Find the index of the closest point
+    int closestPointIndex = -1;
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < polylinePoints.length; i++) {
+      final distance = NavigationUtilities.calculateDistance(
+        closestPoint,
+        polylinePoints[i],
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPointIndex = i;
+      }
+    }
+
+    // Calculate remaining distance by summing distances between remaining points
+    if (closestPointIndex >= 0 &&
+        closestPointIndex < polylinePoints.length - 1) {
+      double remainingDistance = 0;
+
+      // Add distance from current position to closest route point
+      remainingDistance += NavigationUtilities.calculateDistance(
+        position,
+        closestPoint,
+      );
+
+      // Add distances between remaining route points
+      for (int i = closestPointIndex; i < polylinePoints.length - 1; i++) {
+        remainingDistance += NavigationUtilities.calculateDistance(
+          polylinePoints[i],
+          polylinePoints[i + 1],
+        );
+      }
+
+      return remainingDistance.round();
+    }
+
+    // Fallback: return the total route distance
+    return distanceMeters;
   }
 
   @override
@@ -158,6 +217,23 @@ class RouteStep extends Equatable {
     } else {
       return 'straight';
     }
+  }
+
+  // Check if this step is a turn
+  bool get isTurn {
+    return maneuver.contains('left') ||
+        maneuver.contains('right') ||
+        maneuver.contains('u-turn');
+  }
+
+  // Calculate bearing of this step
+  double get bearing {
+    return NavigationUtilities.calculateBearing(startLocation, endLocation);
+  }
+
+  // Get bearing direction name
+  String get bearingDirectionName {
+    return NavigationUtilities.getDirectionFromBearing(bearing);
   }
 
   @override

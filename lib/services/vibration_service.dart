@@ -73,14 +73,15 @@ class VibrationService {
         // Handle other platforms
         if (Platform.isMacOS) {
           _platformName = 'macOS';
-        } else if (Platform.isWindows)
+        } else if (Platform.isWindows) {
           _platformName = 'Windows';
-        else if (Platform.isLinux)
+        } else if (Platform.isLinux) {
           _platformName = 'Linux';
-        else if (Platform.isFuchsia)
+        } else if (Platform.isFuchsia) {
           _platformName = 'Fuchsia';
-        else
+        } else {
           _platformName = 'unknown';
+        }
       }
 
       _vibrationSupported = await hasVibrator();

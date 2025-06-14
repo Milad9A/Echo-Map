@@ -15,14 +15,17 @@ import UIKit
       binaryMessenger: controller.binaryMessenger
     )
 
-    // Register a method handler to receive the API key
+    // Initialize with API key from strings.xml immediately to avoid timing issues
+    GMSServices.provideAPIKey("AIzaSyCDbCBlp1BPzDJA6syOvXFooptR7wZxkmM")
+
+    // Register a method handler to receive the API key from Dart (for future reference)
     apiKeyChannel.setMethodCallHandler { [weak self] (call, result) in
       if call.method == "setGoogleMapsApiKey" {
         if let args = call.arguments as? [String: Any],
           let apiKey = args["apiKey"] as? String
         {
-          // Initialize Google Maps with the provided API key
-          GMSServices.provideAPIKey(apiKey)
+          // API key already initialized above, just log success
+          print("API key confirmed: \(apiKey)")
           result(true)
         } else {
           result(
@@ -35,9 +38,6 @@ import UIKit
         result(FlutterMethodNotImplemented)
       }
     }
-
-    // Initialize with a temporary key - will be replaced when Dart code calls the method
-    GMSServices.provideAPIKey("AIzaSyCDbCBlp1BPzDJA6syOvXFooptR7wZxkmM")
 
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

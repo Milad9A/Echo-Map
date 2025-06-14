@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../models/route_information.dart';
 
 abstract class NavigationEvent extends Equatable {
   const NavigationEvent();
@@ -14,6 +15,15 @@ class StartNavigation extends NavigationEvent {
 
   @override
   List<Object> get props => [destination];
+}
+
+class StartNavigatingRoute extends NavigationEvent {
+  final RouteInformation route;
+
+  const StartNavigatingRoute(this.route);
+
+  @override
+  List<Object> get props => [route];
 }
 
 class StopNavigation extends NavigationEvent {}
@@ -52,4 +62,13 @@ class ApproachingHazard extends NavigationEvent {
 
   @override
   List<Object> get props => [hazardType];
+}
+
+class RouteDeviation extends NavigationEvent {
+  final double deviationDistance;
+
+  const RouteDeviation(this.deviationDistance);
+
+  @override
+  List<Object> get props => [deviationDistance];
 }

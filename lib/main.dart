@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,6 +22,11 @@ void main() async {
 
   // Configure platform-specific settings (API keys, etc.)
   await PlatformConfig.configure();
+
+  // Give iOS more time to fully initialize Maps services
+  if (Platform.isIOS) {
+    await Future.delayed(const Duration(milliseconds: 1000));
+  }
 
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([

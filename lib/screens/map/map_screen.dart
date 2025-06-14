@@ -7,6 +7,7 @@ import '../../blocs/location/location_event.dart';
 import '../../services/mapping_service.dart';
 import '../../services/routing_service.dart';
 import '../../models/route_information.dart';
+import '../../utils/map_config.dart'; // Import the new config file
 import 'package:geolocator/geolocator.dart';
 
 class MapScreen extends StatefulWidget {
@@ -23,13 +24,9 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
   RouteInformation? _currentRoute;
   bool _isLoading = false;
+  bool _mapInitialized = false;
   String? _errorMessage;
-
-  // Default map settings
-  static const CameraPosition _defaultPosition = CameraPosition(
-    target: LatLng(48.2082, 16.3738), // Vienna, Austria as default
-    zoom: 14.0,
-  );
+  bool _centeringOnLocationRequested = false;
 
   @override
   void initState() {
@@ -37,22 +34,46 @@ class _MapScreenState extends State<MapScreen> {
     _initializeServices();
   }
 
+  @override
+  void dispose() {
+    // Only dispose of the controller if mapping service doesn't have it
+    if (_mapController != null &&
+        _mapController != _mappingService.mapController) {
+      try {
+        _mapController!.dispose();
+      } catch (e) {
+        debugPrint('Error disposing map controller: $e');
+      }
+      _mapController = null;
+    }
+
+    super.dispose();
+  }
+
   Future<void> _initializeServices() async {
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+
+    // Access the bloc synchronously before any await
+    final locationBloc = context.read<LocationBloc>();
 
     try {
       // Initialize mapping service
       await _mappingService.initialize();
 
       // Initialize location if not already started
-      final locationBloc = context.read<LocationBloc>();
       if (locationBloc.state is! LocationTracking) {
         locationBloc.add(LocationInitialize());
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Failed to initialize map: $e');
+      if (mounted) {
+        setState(() => _errorMessage = 'Failed to initialize map: $e');
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -131,9 +152,9 @@ class _MapScreenState extends State<MapScreen> {
       builder: (context, state) {
         return Stack(
           children: [
-            // Google Map
+            // Google Map - Use MapConfig.defaultPosition instead of the hardcoded constant
             GoogleMap(
-              initialCameraPosition: _defaultPosition,
+              initialCameraPosition: MapConfig.defaultPosition,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               compassEnabled: true,
@@ -142,11 +163,33 @@ class _MapScreenState extends State<MapScreen> {
               markers: _mappingService.markers,
               polylines: _mappingService.polylines,
               onMapCreated: (GoogleMapController controller) {
-                _mapController = controller;
-                _mappingService.setMapController(controller);
+                // Store controller locally
+                setState(() {
+                  _mapController = controller;
+                });
 
-                // Center on user's location when map is created
-                _centerOnUserLocation();
+                // Hand off controller to mapping service with a delay
+                Future.delayed(const Duration(milliseconds: 800), () {
+                  if (mounted) {
+                    // Only set the controller if it hasn't been set yet
+                    if (_mappingService.mapController == null) {
+                      _mappingService.setMapController(controller);
+                    }
+
+                    // Set flag that map is initialized
+                    setState(() {
+                      _mapInitialized = true;
+                    });
+
+                    // Add a delay before centering on user's location
+                    Future.delayed(const Duration(seconds: 2), () {
+                      if (mounted && !_centeringOnLocationRequested) {
+                        _centeringOnLocationRequested = true;
+                        _centerOnUserLocation();
+                      }
+                    });
+                  }
+                });
               },
             ),
 
@@ -209,6 +252,13 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 ),
               ),
+
+            // Loading indicator if map is not fully initialized
+            if (!_mapInitialized)
+              Container(
+                color: const Color.fromRGBO(0, 0, 0, 0.1),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
           ],
         );
       },
@@ -217,18 +267,54 @@ class _MapScreenState extends State<MapScreen> {
 
   // Center the map on the user's current location
   Future<void> _centerOnUserLocation() async {
-    final state = context.read<LocationBloc>().state;
+    if (!mounted) return;
 
-    // If location tracking is active, use current position
-    if (state is LocationTracking) {
-      await _mappingService.animateCameraToPosition(
-        LatLng(state.currentPosition.latitude, state.currentPosition.longitude),
+    // Read the bloc state before any await to avoid using context after an async gap
+    final locationBlocState = context.read<LocationBloc>().state;
+
+    if (!_mapInitialized) {
+      debugPrint('Map not yet initialized, waiting...');
+      // Wait for map to initialize with a timeout
+      final initialized = await _mappingService.waitForMapInitialization(
+        timeout: const Duration(seconds: 5),
       );
-      return;
+      if (!initialized) {
+        debugPrint('Map initialization timed out, cannot center on location');
+        return;
+      }
     }
 
-    // Otherwise use location service directly
-    await _mappingService.centerOnUserLocation();
+    try {
+      // Add a small delay to ensure the map is fully ready
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // If location tracking is active, use current position
+      if (locationBlocState is LocationTracking) {
+        await _mappingService.animateCameraToPosition(
+          LatLng(
+            locationBlocState.currentPosition.latitude,
+            locationBlocState.currentPosition.longitude,
+          ),
+        );
+        return;
+      }
+
+      // Otherwise use location service directly
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      if (!mounted) return;
+
+      await _mappingService.animateCameraToPosition(
+        LatLng(position.latitude, position.longitude),
+      );
+    } catch (e) {
+      debugPrint('Error centering on user location: $e');
+      // Don't update state or show error to avoid disrupting the user experience
+    }
   }
 
   // Clear the current route
@@ -240,6 +326,82 @@ class _MapScreenState extends State<MapScreen> {
     _mappingService.clearPolylines();
   }
 
+  // Fit the map view to show the entire route
+  void _fitRouteOnMap(List<LatLng> points) {
+    if (points.isEmpty || _mapController == null) return;
+
+    // Safety check to avoid using a disposed controller
+    if (!_mapInitialized) {
+      debugPrint('Map not fully initialized, skipping route fitting');
+      return;
+    }
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+
+    // Add a short delay to ensure the map is ready for animations
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted || _mapController == null) return;
+
+      try {
+        final bounds = LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        );
+
+        // Use a more reliable approach for animation
+        _mapController!
+            .animateCamera(CameraUpdate.newLatLngBounds(bounds, 50.0))
+            .timeout(
+              const Duration(seconds: 2),
+              onTimeout: () {
+                debugPrint(
+                  'Camera animation timed out, trying alternative approach',
+                );
+                // Fallback to center on the route
+                if (mounted && _mapController != null) {
+                  final center = LatLng(
+                    (minLat + maxLat) / 2,
+                    (minLng + maxLng) / 2,
+                  );
+                  _mapController!.moveCamera(
+                    CameraUpdate.newLatLngZoom(center, 13),
+                  );
+                }
+              },
+            )
+            .catchError((e) {
+              debugPrint('Error animating camera to show route: $e');
+              // Try a simpler camera update as fallback
+              if (mounted && _mapController != null) {
+                try {
+                  final center = LatLng(
+                    (minLat + maxLat) / 2,
+                    (minLng + maxLng) / 2,
+                  );
+                  _mapController!.moveCamera(
+                    CameraUpdate.newLatLngZoom(center, 13),
+                  );
+                } catch (e2) {
+                  debugPrint('Fallback camera update also failed: $e2');
+                }
+              }
+            });
+      } catch (e) {
+        debugPrint('Exception when fitting route on map: $e');
+      }
+    });
+  }
+
   // Calculate a test route (for development purposes)
   Future<void> _calculateTestRoute() async {
     setState(() => _isLoading = true);
@@ -247,10 +409,12 @@ class _MapScreenState extends State<MapScreen> {
     try {
       // Get current position
       Position? position;
-      final state = context.read<LocationBloc>().state;
+      final locationBlocState = context
+          .read<LocationBloc>()
+          .state; // Read before any await
 
-      if (state is LocationTracking) {
-        position = state.currentPosition;
+      if (locationBlocState is LocationTracking) {
+        position = locationBlocState.currentPosition;
       } else {
         position = await Geolocator.getCurrentPosition();
       }
@@ -298,6 +462,9 @@ class _MapScreenState extends State<MapScreen> {
       _mappingService.clearPolylines();
       _mappingService.addPolyline(id: 'route', points: route.polylinePoints);
 
+      // Give the map some time to process the updates before fitting the route
+      await Future.delayed(const Duration(milliseconds: 300));
+
       // Show the entire route
       _fitRouteOnMap(route.polylinePoints);
     } catch (e) {
@@ -305,33 +472,6 @@ class _MapScreenState extends State<MapScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
-  }
-
-  // Fit the map view to show the entire route
-  void _fitRouteOnMap(List<LatLng> points) {
-    if (points.isEmpty || _mapController == null) return;
-
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
-
-    for (final point in points) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLng) minLng = point.longitude;
-      if (point.longitude > maxLng) maxLng = point.longitude;
-    }
-
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
-        ),
-        50.0, // padding
-      ),
-    );
   }
 
   // Start navigation with the current route

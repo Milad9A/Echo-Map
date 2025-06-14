@@ -2,6 +2,33 @@
 
 EchoMap is a vibration-only navigation app built in Flutter to empower blind and low-vision users to travel independently and confidently. By translating turn-by-turn directions into distinct haptic cues, EchoMap keeps you on the right path—no sight required.
 
+## Project Status
+
+EchoMap is currently in active development. The core functionality includes:
+
+- ✅ Vibration pattern system for navigation feedback
+- ✅ Location tracking and route deviation detection
+- ✅ Turn detection and advance notification
+- ✅ Google Maps integration for routing
+- ✅ Testing utilities for vibration patterns
+
+## Vibration Patterns
+
+EchoMap uses carefully designed haptic patterns to communicate navigation information:
+
+| Pattern | Description | Usage |
+|---------|-------------|-------|
+| onRoute | Short, consistent taps | Confirms you're following the correct path |
+| approachingTurn | Ascending intensity pattern | Warns about an upcoming turn |
+| leftTurn | Strong-weak-weak pattern | Indicates a left turn |
+| rightTurn | Weak-weak-strong pattern | Indicates a right turn |
+| uTurn | Double-strong pulses | Signals to make a U-turn |
+| wrongDirection | Strong, attention-grabbing pattern | Alerts when you're off route |
+| destinationReached | Celebratory pattern | Confirms arrival at destination |
+| crossingStreet | Double-tap pattern with pause | Warns about street crossings |
+| hazardWarning | Urgent, repeating pattern | Alerts about potential hazards |
+| recalculating | Rapid, staccato vibrations | Indicates route recalculation |
+
 ## Environment Setup
 
 This project uses environment variables to manage API keys and other sensitive information.
@@ -45,29 +72,16 @@ EchoMap uses distinct vibration patterns to guide users along a route without re
 - **GPS location services** to track user position
 - **Mapping services** to determine routes and navigation
 - **Accessible UI design** to ensure compatibility with screen readers
+- **Turn detection service** to predict and notify about upcoming turns
 
-## Architecture
+## Key Features
 
-EchoMap uses the BLoC (Business Logic Component) pattern for state management with the following structure:
-
-```
-lib/
-├── blocs/          # BLoC classes for state management
-├── models/         # Data models
-├── repositories/   # Data access layer
-├── screens/        # UI screens
-├── services/       # Business logic and services
-├── utils/          # Utility functions
-├── widgets/        # Reusable UI components
-└── main.dart       # App entry point
-```
-
-## Features
-
-- Vibration-based turn-by-turn navigation
-- Accessible user interface optimized for screen readers
-- Safety features for street crossings and hazards
-- Voice command input for destinations
+- **Vibration-based turn-by-turn navigation** with distinct patterns for different instructions
+- **Advanced turn detection** to provide timely notifications before turns
+- **Route deviation detection** to alert when off course
+- **Accessible user interface** optimized for screen readers
+- **Safety features** for street crossings and hazards
+- **Vibration pattern testing tool** to fine-tune haptic feedback
 
 ## Getting Started
 
@@ -76,6 +90,7 @@ lib/
 - Flutter SDK (3.8.0 or higher)
 - Android Studio / VS Code with Flutter extensions
 - iOS simulator / Android emulator or physical device
+- Google Maps API key
 
 ### Installation
 
@@ -91,11 +106,25 @@ git clone https://github.com/yourusername/echo_map.git
 flutter pub get
 ```
 
-3. Run the app
+3. Set up environment variables as described above
+
+4. Run the app
 
 ```
 flutter run
 ```
+
+## Testing Features
+
+EchoMap includes dedicated testing screens to validate core functionality:
+
+- **Vibration Test Screen**: Test and compare different haptic patterns
+- **Location Test Screen**: Verify GPS tracking and accuracy
+- **Map Screen**: Test route calculation and visualization
+
+## Contributing
+
+Contributions to EchoMap are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
