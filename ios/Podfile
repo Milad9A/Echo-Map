@@ -50,25 +50,53 @@ post_install do |installer|
       config.build_settings['CODE_SIGNING_REQUIRED'] = "NO"
       config.build_settings['CODE_SIGNING_ALLOWED'] = "NO"
       
-      # Fix for header search paths
+      # Enhanced header search paths for Google-Maps-iOS-Utils
       if target.name == 'Google-Maps-iOS-Utils'
-        config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) "${PODS_ROOT}/Headers/Private" "${PODS_ROOT}/Headers/Private/Google-Maps-iOS-Utils" "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/Google-Maps-iOS-Utils" "${PODS_ROOT}/GoogleMaps/Maps/Frameworks/GoogleMaps.framework/Headers"'
+        # More comprehensive header search paths
+        config.build_settings['HEADER_SEARCH_PATHS'] = [
+          '$(inherited)',
+          '"${PODS_ROOT}/Headers/Private"', 
+          '"${PODS_ROOT}/Headers/Private/Google-Maps-iOS-Utils"',
+          '"${PODS_ROOT}/Headers/Public"',
+          '"${PODS_ROOT}/Headers/Public/Google-Maps-iOS-Utils"',
+          '"${PODS_ROOT}/GoogleMaps/Maps/Frameworks/GoogleMaps.framework/Headers"',
+          '"${PODS_TARGET_SRCROOT}/src/Clustering"',
+          '"${PODS_TARGET_SRCROOT}/src/GeometryUtils"',
+          '"${PODS_TARGET_SRCROOT}/src/Heatmap"',
+          '"${PODS_TARGET_SRCROOT}/src/QuadTree"',
+          '"${PODS_ROOT}/Target Support Files/Google-Maps-iOS-Utils"'  # Add this line to find the umbrella header
+        ]
+        
+        # Ensure modulemap is properly configured
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
       end
     end
-    
-    # Fix umbrella header imports if needed
-    if target.name == 'Google-Maps-iOS-Utils'
-      fix_umbrella_header(installer, target)
-    end
   end
-end
-
-# Helper method to fix umbrella header imports
-def fix_umbrella_header(installer, target)
-  umbrella_header_path = "#{installer.sandbox.build_headers_dir.realdirpath}/Google-Maps-iOS-Utils/Google-Maps-iOS-Utils-umbrella.h"
-  if File.exist?(umbrella_header_path)
-    content = File.read(umbrella_header_path)
-    fixed_content = content.gsub(/#import "(.+)"/, '#import <Google-Maps-iOS-Utils/\1>')
-    File.write(umbrella_header_path, fixed_content)
+  
+  # Fix for umbrella header imports
+  begin
+    utils_target = installer.pods_project.targets.find { |t| t.name == 'Google-Maps-iOS-Utils' }
+    if utils_target
+      # Try to find the umbrella header in the standard location
+      Dir.glob(File.join(installer.sandbox.root, "Target Support Files", "Google-Maps-iOS-Utils", "*umbrella.h")).each do |umbrella_path|
+        content = File.read(umbrella_path)
+        fixed_content = content.gsub(/#import <Google-Maps-iOS-Utils\/(.+)>/, '#import "\1"')
+        File.write(umbrella_path, fixed_content)
+        puts "Fixed umbrella imports in #{umbrella_path}"
+      end
+      
+      # Additional fix for module map
+      module_map_path = File.join(installer.sandbox.root, "Target Support Files", "Google-Maps-iOS-Utils", "Google-Maps-iOS-Utils.modulemap")
+      if File.exist?(module_map_path)
+        content = File.read(module_map_path)
+        fixed_content = content.gsub(/umbrella header "<Google-Maps-iOS-Utils\/(.+)>"/, 'umbrella header "\1"')
+        File.write(module_map_path, fixed_content)
+        puts "Fixed module map in #{module_map_path}"
+      end
+    end
+  rescue => e
+    # Don't let header fixes break the build
+    puts "Warning: Error fixing umbrella headers: #{e.message}"
   end
 end

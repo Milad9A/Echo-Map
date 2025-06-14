@@ -22,6 +22,16 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
+                Navigator.pushNamed(context, '/map');
+              },
+              child: const Text(
+                'Open Map',
+                semanticsLabel: 'Open navigation map screen',
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
                 // Will implement navigation functionality
               },
               child: const Text(

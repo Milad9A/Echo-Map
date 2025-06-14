@@ -48,7 +48,11 @@ app.*.map.json
 # API keys and secrets
 .env
 .env.local
+.env.development
+.env.test
+.env.production
 lib/constants/secrets.dart
+android/app/src/main/res/values/strings.xml
 
 # iOS specific
 **/ios/Podfile.lock
