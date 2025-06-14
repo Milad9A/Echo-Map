@@ -7,7 +7,9 @@ import '../../blocs/location/location_event.dart';
 import '../../services/mapping_service.dart';
 import '../../services/routing_service.dart';
 import '../../models/route_information.dart';
+import '../../models/waypoint.dart';
 import '../../utils/map_config.dart';
+import '../destination/destination_search_screen.dart';
 import 'package:geolocator/geolocator.dart';
 
 class MapScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool _mapInitialized = false;
   String? _errorMessage;
   bool _centeringOnLocationRequested = false;
+  Waypoint? _selectedDestination;
 
   @override
   void initState() {
@@ -128,10 +131,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // Destination selection button
+          FloatingActionButton(
+            heroTag: 'destination',
+            onPressed: _openDestinationSearch,
+            backgroundColor: _selectedDestination != null ? Colors.green : null,
+            child: const Icon(Icons.search),
+          ),
+          const SizedBox(height: 16),
           // Test route button (for development)
           FloatingActionButton(
             heroTag: 'testRoute',
-            onPressed: _calculateTestRoute,
+            onPressed: _selectedDestination != null
+                ? _calculateRouteToDestination
+                : _calculateTestRoute,
             child: const Icon(Icons.route),
           ),
           const SizedBox(height: 16),
@@ -403,6 +416,150 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       });
     } catch (e) {
       debugPrint('Error calculating bounds: $e');
+    }
+  }
+
+  // Open destination search screen
+  Future<void> _openDestinationSearch() async {
+    // Get current position for initial location
+    Position? position;
+    final locationBlocState = context.read<LocationBloc>().state;
+
+    if (locationBlocState is LocationTracking) {
+      position = locationBlocState.currentPosition;
+    } else {
+      try {
+        position = await Geolocator.getCurrentPosition();
+      } catch (e) {
+        debugPrint('Error getting current position: $e');
+      }
+    }
+
+    // Navigate to destination search screen
+    Waypoint? result;
+    if (!mounted) return;
+    result = await Navigator.push<Waypoint>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DestinationSearchScreen(
+          initialLocation: position != null
+              ? LatLng(position.latitude, position.longitude)
+              : null,
+        ),
+      ),
+    );
+
+    // If a destination was selected, update state
+    if (result != null) {
+      setState(() {
+        _selectedDestination = result;
+      });
+
+      // Add a marker for the selected destination
+      _mappingService.clearMarkers();
+      _mappingService.addMarker(
+        id: 'destination',
+        position: result.position,
+        title: result.name,
+        snippet: result.description ?? '',
+      );
+
+      // Center map on the destination
+      _mappingService.animateCameraToPosition(result.position, zoom: 15);
+
+      // Show a snackbar
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Destination set: ${result.name}'),
+          action: SnackBarAction(
+            label: 'Calculate Route',
+            onPressed: _calculateRouteToDestination,
+          ),
+        ),
+      );
+    }
+  }
+
+  // Calculate route to the selected destination
+  Future<void> _calculateRouteToDestination() async {
+    if (_selectedDestination == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a destination first')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Get current position
+      Position? position;
+      final locationBlocState = context.read<LocationBloc>().state;
+
+      if (locationBlocState is LocationTracking) {
+        position = locationBlocState.currentPosition;
+      } else {
+        position = await Geolocator.getCurrentPosition();
+      }
+
+      // Create origin from current position
+      final origin = LatLng(position.latitude, position.longitude);
+
+      // Use the selected destination
+      final destination = _selectedDestination!.position;
+
+      // Calculate route
+      final route = await _routingService.calculateRoute(
+        origin,
+        destination,
+        mode: TravelMode.walking,
+      );
+
+      if (route == null) {
+        throw Exception('Could not calculate route');
+      }
+
+      // Update state with new route
+      setState(() {
+        _currentRoute = route;
+        _errorMessage = null;
+        _isLoading = false;
+      });
+
+      // Add markers for origin and destination
+      _mappingService.clearMarkers();
+      _mappingService.addMarker(
+        id: 'origin',
+        position: origin,
+        title: 'Starting Point',
+      );
+      _mappingService.addMarker(
+        id: 'destination',
+        position: destination,
+        title: _selectedDestination!.name,
+        snippet: _selectedDestination!.description ?? '',
+      );
+
+      // Add polyline for the route
+      _mappingService.clearPolylines();
+      _mappingService.addPolyline(id: 'route', points: route.polylinePoints);
+
+      // Give the map some time to process the updates before fitting the route
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Show the entire route
+      _fitRouteOnMap(route.polylinePoints);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      }
     }
   }
 

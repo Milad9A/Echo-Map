@@ -72,11 +72,12 @@ class EchoMapApp extends StatelessWidget {
         ),
         themeMode: ThemeMode.system,
         debugShowCheckedModeBanner: false,
+        initialRoute: '/',
         routes: {
           '/': (context) => const HomeScreen(),
+          '/map': (context) => const MapScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
           '/location_test': (context) => const LocationTestScreen(),
-          '/map': (context) => const MapScreen(),
         },
       ),
     );
