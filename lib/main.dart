@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:echo_map/screens/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,6 +14,7 @@ import 'screens/map/map_screen.dart';
 import 'services/vibration_service.dart';
 import 'services/location_service.dart';
 import 'utils/platform_config.dart';
+import 'utils/theme_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,20 +58,8 @@ class EchoMapApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'EchoMap',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-          // High contrast theme settings for accessibility
-          brightness: Brightness.light,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-          visualDensity: VisualDensity.comfortable,
-        ),
+        theme: ThemeConfig.getLightTheme(),
+        darkTheme: ThemeConfig.getDarkTheme(),
         themeMode: ThemeMode.system,
         debugShowCheckedModeBanner: false,
         initialRoute: '/',
@@ -78,6 +68,7 @@ class EchoMapApp extends StatelessWidget {
           '/map': (context) => const MapScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
           '/location_test': (context) => const LocationTestScreen(),
+          '/settings': (context) => const SettingsScreen(),
         },
       ),
     );

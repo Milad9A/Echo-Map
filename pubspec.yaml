@@ -29,6 +29,8 @@ dependencies:
   flutter_tts: ^4.2.3
 
   flutter_dotenv: ^5.1.0
+  speech_to_text: ^7.0.0
+  shake: ^3.0.0
 
 dev_dependencies:
   flutter_test:

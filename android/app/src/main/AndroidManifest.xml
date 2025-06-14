@@ -12,6 +12,9 @@
     <!-- Permissions for vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Add speech recognition permission -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <application
         android:label="EchoMap"
         android:name="${applicationName}"

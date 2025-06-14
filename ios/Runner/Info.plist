@@ -57,5 +57,13 @@
 		<array>
 			<string>location</string>
 		</array>
+
+		<!-- Speech recognition permission -->
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>EchoMap needs speech recognition to allow you to give voice commands for navigation and destination search.</string>
+
+		<!-- Microphone permission (required for speech recognition) -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>EchoMap needs microphone access to enable voice commands for easier hands-free navigation.</string>
 	</dict>
 </plist>
