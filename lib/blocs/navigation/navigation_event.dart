@@ -46,10 +46,7 @@ class ApproachingTurn extends NavigationEvent {
   final String turnDirection; // "left", "right", "uturn"
   final RouteStep step;
 
-  const ApproachingTurn({
-    required this.turnDirection,
-    required this.step,
-  });
+  const ApproachingTurn({required this.turnDirection, required this.step});
 
   @override
   List<Object> get props => [turnDirection, step];
@@ -99,10 +96,7 @@ class OffRoute extends NavigationEvent {
   final LatLng position;
   final double deviationDistance;
 
-  const OffRoute({
-    required this.position,
-    required this.deviationDistance,
-  });
+  const OffRoute({required this.position, required this.deviationDistance});
 
   @override
   List<Object> get props => [position, deviationDistance];
@@ -129,7 +123,7 @@ class DestinationReached extends NavigationEvent {
 class ApproachingCrossing extends NavigationEvent {
   final LatLng position;
 
-  const ApproachingCrossing(this.position);
+  const ApproachingCrossing({required this.position});
 
   @override
   List<Object> get props => [position];
@@ -139,10 +133,7 @@ class ApproachingHazard extends NavigationEvent {
   final String hazardType;
   final LatLng position;
 
-  const ApproachingHazard({
-    required this.hazardType,
-    required this.position,
-  });
+  const ApproachingHazard({required this.hazardType, required this.position});
 
   @override
   List<Object> get props => [hazardType, position];
@@ -159,4 +150,75 @@ class RouteDeviation extends NavigationEvent {
 
   @override
   List<Object> get props => [position, deviationDistance];
+}
+
+class EmergencyStopRequested extends NavigationEvent {
+  final String reason;
+  final LatLng? position;
+
+  const EmergencyStopRequested({required this.reason, this.position});
+
+  @override
+  List<Object> get props => position != null ? [reason, position!] : [reason];
+}
+
+class EmergencyRerouteRequested extends NavigationEvent {
+  final String reason;
+  final LatLng position;
+  final List<LatLng> areaToAvoid;
+
+  const EmergencyRerouteRequested({
+    required this.reason,
+    required this.position,
+    this.areaToAvoid = const [],
+  });
+
+  @override
+  List<Object> get props => [reason, position, areaToAvoid];
+}
+
+class EmergencyDetourRequested extends NavigationEvent {
+  final String reason;
+  final LatLng position;
+  final LatLng hazardLocation;
+
+  const EmergencyDetourRequested({
+    required this.reason,
+    required this.position,
+    required this.hazardLocation,
+  });
+
+  @override
+  List<Object> get props => [reason, position, hazardLocation];
+}
+
+class EmergencyEventReceived extends NavigationEvent {
+  final String type;
+  final String action;
+  final String description;
+  final LatLng? location;
+
+  const EmergencyEventReceived({
+    required this.type,
+    required this.action,
+    required this.description,
+    this.location,
+  });
+
+  @override
+  List<Object> get props => [
+    type,
+    action,
+    description,
+    if (location != null) location!,
+  ];
+}
+
+class EmergencyResolved extends NavigationEvent {
+  final String resolution;
+
+  const EmergencyResolved(this.resolution);
+
+  @override
+  List<Object> get props => [resolution];
 }

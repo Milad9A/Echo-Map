@@ -57,6 +57,21 @@ class VibrationService {
 
     // Rapid, staccato vibrations - "recalculating route"
     'recalculating': [0, 80, 80, 80, 80, 80, 80, 80, 80, 300],
+
+    // Emergency stop - critical pattern for immediate attention
+    'emergencyStop': [0, 800, 200, 800, 200, 800, 200, 800, 200, 800],
+
+    // Emergency rerouting - urgent pattern for quick action
+    'emergencyRerouting': [0, 500, 100, 500, 100, 200, 100, 200, 100, 500],
+
+    // New route available - notification for user
+    'newRoute': [0, 300, 100, 300, 100, 300, 500],
+
+    // Pause navigation - gentle reminder to the user
+    'pauseNavigation': [0, 400, 400, 400, 400],
+
+    // Slow down - gradual pattern to indicate slowing down
+    'slowDown': [0, 100, 100, 200, 100, 300, 100, 400, 100],
   };
 
   // Initialize the vibration service
@@ -508,5 +523,30 @@ class VibrationService {
     } catch (e) {
       debugPrint('Error stopping vibration: $e');
     }
+  }
+
+  // Emergency stop feedback - most intense and longest pattern
+  Future<void> emergencyStopFeedback() async {
+    return playPattern('emergencyStop', intensity: highIntensity);
+  }
+
+  // Emergency rerouting feedback
+  Future<void> emergencyReroutingFeedback() async {
+    return playPattern('emergencyRerouting', intensity: highIntensity);
+  }
+
+  // New route available feedback
+  Future<void> newRouteFeedback() async {
+    return playPattern('newRoute', intensity: mediumIntensity);
+  }
+
+  // Pause navigation feedback
+  Future<void> pauseNavigationFeedback() async {
+    return playPattern('pauseNavigation', intensity: mediumIntensity);
+  }
+
+  // Slow down feedback
+  Future<void> slowDownFeedback() async {
+    return playPattern('slowDown', intensity: mediumIntensity);
   }
 }

@@ -7,6 +7,9 @@ import '../../services/mapping_service.dart';
 import '../../services/navigation_monitoring_service.dart';
 import '../../services/vibration_service.dart';
 import '../../services/routing_service.dart';
+import '../../models/street_crossing.dart';
+import '../../models/hazard.dart';
+import '../../services/emergency_service.dart';
 import 'navigation_event.dart';
 import 'navigation_state.dart';
 
@@ -18,6 +21,8 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       NavigationMonitoringService();
   final RoutingService _routingService = RoutingService();
 
+  final EmergencyService _emergencyService = EmergencyService();
+
   // Subscriptions
   StreamSubscription<NavigationStatus>? _statusSubscription;
   StreamSubscription<LatLng>? _positionSubscription;
@@ -26,6 +31,11 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
   StreamSubscription<LatLng>? _destinationReachedSubscription;
   StreamSubscription<bool>? _reroutingSubscription;
   StreamSubscription<String>? _errorSubscription;
+
+  // Add new subscriptions
+  StreamSubscription<StreetCrossing>? _crossingSubscription;
+  StreamSubscription<Hazard>? _hazardSubscription;
+  StreamSubscription<EmergencyEvent>? _emergencySubscription;
 
   NavigationBloc() : super(NavigationIdle()) {
     on<StartNavigation>(_onStartNavigation);
@@ -46,6 +56,13 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     on<ApproachingHazard>(_onApproachingHazard);
     on<RouteDeviation>(_onRouteDeviation);
     on<_NavigationErrorReceived>(_onNavigationErrorReceived);
+
+    // Add handlers for emergency events
+    on<EmergencyStopRequested>(_onEmergencyStopRequested);
+    on<EmergencyRerouteRequested>(_onEmergencyRerouteRequested);
+    on<EmergencyDetourRequested>(_onEmergencyDetourRequested);
+    on<EmergencyEventReceived>(_onEmergencyEventReceived);
+    on<EmergencyResolved>(_onEmergencyResolved);
 
     // Subscribe to navigation service events
     _subscribeToNavigationService();
@@ -108,6 +125,44 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     // Subscribe to error events
     _errorSubscription = _navigationService.errorStream.listen((errorMessage) {
       add(_NavigationErrorReceived(errorMessage));
+    });
+
+    // Subscribe to crossing detected events
+    _crossingSubscription = _navigationService.crossingDetectedStream.listen((
+      crossing,
+    ) {
+      add(
+        ApproachingCrossing(
+          position: LatLng(
+            crossing.position.latitude,
+            crossing.position.longitude,
+          ),
+        ),
+      );
+    });
+
+    // Subscribe to hazard detected events
+    _hazardSubscription = _navigationService.hazardDetectedStream.listen((
+      hazard,
+    ) {
+      add(
+        ApproachingHazard(
+          hazardType: hazard.type.toString(),
+          position: hazard.position,
+        ),
+      );
+    });
+
+    // Subscribe to emergency events
+    _emergencySubscription = _navigationService.emergencyStream.listen((event) {
+      add(
+        EmergencyEventReceived(
+          type: event.type.toString(),
+          action: event.action.toString(),
+          description: event.description,
+          location: event.location,
+        ),
+      );
     });
   }
 
@@ -488,6 +543,207 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     emit(NavigationError(message: event.message));
   }
 
+  // Handle emergency stop request
+  Future<void> _onEmergencyStopRequested(
+    EmergencyStopRequested event,
+    Emitter<NavigationState> emit,
+  ) async {
+    if (state is NavigationActive || state is NavigationRerouting) {
+      // Request emergency stop from navigation service
+      await _navigationService.emergencyStop(event.reason);
+
+      // Update UI state
+      emit(
+        NavigationEmergency(
+          emergencyType: 'STOP',
+          description: event.reason,
+          currentPosition:
+              event.position ??
+              (state is NavigationActive
+                  ? (state as NavigationActive).currentPosition
+                  : null),
+          isResolvable: false, // Stop is final
+          actionRequired: 'Navigation stopped due to emergency',
+        ),
+      );
+
+      // Clear map displays
+      _mappingService.clearPolylines();
+      _vibrationService.stopVibration();
+    }
+  }
+
+  // Handle emergency reroute request
+  Future<void> _onEmergencyRerouteRequested(
+    EmergencyRerouteRequested event,
+    Emitter<NavigationState> emit,
+  ) async {
+    if (state is NavigationActive) {
+      // Show emergency state while rerouting
+      emit(
+        NavigationEmergency(
+          emergencyType: 'REROUTE',
+          description: event.reason,
+          currentPosition: event.position,
+          isResolvable: true,
+          actionRequired: 'Calculating emergency route...',
+        ),
+      );
+
+      try {
+        // Trigger emergency in the service
+        await _emergencyService.triggerEmergency(
+          type: EmergencyType.userInitiated,
+          action: EmergencyAction.reroute,
+          description: event.reason,
+          location: event.position,
+        );
+
+        // The navigation monitoring service will handle the actual rerouting
+        // We'll get updates via the subscription to navigation service
+      } catch (e) {
+        emit(
+          NavigationError(
+            message: 'Failed to request emergency reroute: $e',
+            isFatal: false,
+          ),
+        );
+      }
+    }
+  }
+
+  // Handle emergency detour request
+  Future<void> _onEmergencyDetourRequested(
+    EmergencyDetourRequested event,
+    Emitter<NavigationState> emit,
+  ) async {
+    if (state is NavigationActive) {
+      // Show emergency state while calculating detour
+      emit(
+        NavigationEmergency(
+          emergencyType: 'DETOUR',
+          description: event.reason,
+          currentPosition: event.position,
+          isResolvable: true,
+          actionRequired: 'Calculating detour around hazard...',
+        ),
+      );
+
+      try {
+        // Trigger emergency in the service
+        await _emergencyService.triggerEmergency(
+          type: EmergencyType.hazardAhead,
+          action: EmergencyAction.detour,
+          description: event.reason,
+          location: event.hazardLocation,
+          metadata: {
+            'currentPosition': {
+              'latitude': event.position.latitude,
+              'longitude': event.position.longitude,
+            },
+          },
+        );
+
+        // The navigation monitoring service will handle the actual detour
+        // We'll get updates via the subscription to navigation service
+      } catch (e) {
+        emit(
+          NavigationError(
+            message: 'Failed to request emergency detour: $e',
+            isFatal: false,
+          ),
+        );
+      }
+    }
+  }
+
+  // Handle received emergency events
+  void _onEmergencyEventReceived(
+    EmergencyEventReceived event,
+    Emitter<NavigationState> emit,
+  ) {
+    // Convert string action back to enum value
+    EmergencyAction action;
+    try {
+      action = EmergencyAction.values.firstWhere(
+        (e) => e.toString() == 'EmergencyAction.${event.action}',
+        orElse: () => EmergencyAction.alertUser,
+      );
+    } catch (_) {
+      action = EmergencyAction.alertUser;
+    }
+
+    // Update UI based on emergency type and action
+    if (action == EmergencyAction.stop) {
+      emit(
+        NavigationEmergency(
+          emergencyType: event.type,
+          description: event.description,
+          currentPosition:
+              event.location ??
+              (state is NavigationActive
+                  ? (state as NavigationActive).currentPosition
+                  : null),
+          isResolvable: false,
+          actionRequired: 'Navigation stopped due to emergency',
+        ),
+      );
+    } else if (action == EmergencyAction.reroute ||
+        action == EmergencyAction.detour) {
+      emit(
+        NavigationEmergency(
+          emergencyType: event.type,
+          description: event.description,
+          currentPosition: event.location,
+          isResolvable: true,
+          actionRequired: action == EmergencyAction.reroute
+              ? 'Rerouting...'
+              : 'Creating detour...',
+        ),
+      );
+    } else if (action == EmergencyAction.pause) {
+      emit(
+        NavigationEmergency(
+          emergencyType: event.type,
+          description: event.description,
+          currentPosition: event.location,
+          isResolvable: true,
+          actionRequired: 'Navigation paused. Tap to resume.',
+        ),
+      );
+    }
+    // For alert or slow down, we'd remain in the current state
+    // but the vibration feedback would be handled by the emergency service
+  }
+
+  // Handle emergency resolution
+  void _onEmergencyResolved(
+    EmergencyResolved event,
+    Emitter<NavigationState> emit,
+  ) {
+    // If we're in an emergency state, return to appropriate state
+    if (state is NavigationEmergency) {
+      if (_navigationService.status == NavigationStatus.active &&
+          _navigationService.currentRoute != null &&
+          _navigationService.currentPosition != null) {
+        // Return to active navigation
+        emit(
+          NavigationActive(
+            destination: _navigationService.currentRoute!.destination.name,
+            currentPosition: _navigationService.currentPosition!,
+            route: _navigationService.currentRoute!,
+            isOnRoute: _navigationService.isOnRoute,
+            distanceToDestination: _navigationService.distanceToDestination,
+            estimatedTimeInSeconds: _navigationService.estimatedTimeRemaining,
+          ),
+        );
+      } else {
+        // If navigation is not active, return to idle state
+        emit(NavigationIdle());
+      }
+    }
+  }
+
   @override
   Future<void> close() {
     // Clean up subscriptions
@@ -498,6 +754,9 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     _destinationReachedSubscription?.cancel();
     _reroutingSubscription?.cancel();
     _errorSubscription?.cancel();
+    _crossingSubscription?.cancel();
+    _hazardSubscription?.cancel();
+    _emergencySubscription?.cancel();
 
     // Stop navigation
     _navigationService.stopNavigation();

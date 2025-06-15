@@ -164,3 +164,32 @@ class NavigationError extends NavigationState {
   @override
   List<Object> get props => [message, occurredAt, isFatal];
 }
+
+/// Emergency navigation state
+class NavigationEmergency extends NavigationState {
+  final String emergencyType;
+  final String description;
+  final LatLng? currentPosition;
+  final DateTime occurredAt;
+  final bool isResolvable;
+  final String? actionRequired;
+
+  NavigationEmergency({
+    required this.emergencyType,
+    required this.description,
+    this.currentPosition,
+    this.isResolvable = true,
+    this.actionRequired,
+    DateTime? occurredAt,
+  }) : occurredAt = occurredAt ?? DateTime.now();
+
+  @override
+  List<Object> get props => [
+    emergencyType,
+    description,
+    occurredAt,
+    isResolvable,
+    if (currentPosition != null) currentPosition!,
+    if (actionRequired != null) actionRequired!,
+  ];
+}

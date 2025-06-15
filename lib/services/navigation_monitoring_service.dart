@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:echo_map/models/hazard.dart' show Hazard;
+import 'package:echo_map/models/street_crossing.dart' show StreetCrossing;
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,6 +12,9 @@ import 'location_service.dart';
 import 'mapping_service.dart';
 import 'vibration_service.dart';
 import 'turn_detection_service.dart';
+import '../services/crossing_detection_service.dart';
+import '../services/hazard_service.dart';
+import '../services/emergency_service.dart';
 
 enum NavigationStatus { idle, active, rerouting, arrived, error }
 
@@ -25,6 +30,10 @@ class NavigationMonitoringService {
   final MappingService _mappingService = MappingService();
   final VibrationService _vibrationService = VibrationService();
   final TurnDetectionService _turnDetectionService = TurnDetectionService();
+  final CrossingDetectionService _crossingDetectionService =
+      CrossingDetectionService();
+  final HazardService _hazardService = HazardService();
+  final EmergencyService _emergencyService = EmergencyService();
 
   // Route progress tracker
   final RouteProgressTracker _progressTracker = RouteProgressTracker();
@@ -64,9 +73,13 @@ class NavigationMonitoringService {
   final _upcomingTurnController = StreamController<RouteStep>.broadcast();
   final _destinationReachedController = StreamController<LatLng>.broadcast();
   final _reroutingController = StreamController<bool>.broadcast();
-  final _progressUpdateController = 
+  final _progressUpdateController =
       StreamController<NavigationProgress>.broadcast();
   final _errorController = StreamController<String>.broadcast();
+  final _crossingDetectedController =
+      StreamController<StreetCrossing>.broadcast();
+  final _hazardDetectedController = StreamController<Hazard>.broadcast();
+  final _emergencyController = StreamController<EmergencyEvent>.broadcast();
 
   // Public streams
   Stream<NavigationStatus> get statusStream => _statusController.stream;
@@ -76,9 +89,13 @@ class NavigationMonitoringService {
   Stream<LatLng> get destinationReachedStream =>
       _destinationReachedController.stream;
   Stream<bool> get reroutingStream => _reroutingController.stream;
-  Stream<NavigationProgress> get progressStream => 
+  Stream<NavigationProgress> get progressStream =>
       _progressUpdateController.stream;
   Stream<String> get errorStream => _errorController.stream;
+  Stream<StreetCrossing> get crossingDetectedStream =>
+      _crossingDetectedController.stream;
+  Stream<Hazard> get hazardDetectedStream => _hazardDetectedController.stream;
+  Stream<EmergencyEvent> get emergencyStream => _emergencyController.stream;
 
   // Getters
   NavigationStatus get status => _status;
@@ -148,13 +165,31 @@ class NavigationMonitoringService {
       await _turnDetectionService.startTurnDetection(route);
 
       // Subscribe to turn notifications
-      _turnNotificationSubscription = _turnDetectionService.turnNotificationStream
+      _turnNotificationSubscription = _turnDetectionService
+          .turnNotificationStream
           .listen(
             _handleTurnNotification,
             onError: (error) {
               _reportError('Turn notification error: $error');
             },
           );
+
+      // Start crossing detection
+      await _crossingDetectionService.initialize();
+      await _crossingDetectionService.startMonitoring(route: route);
+
+      // Start hazard detection
+      await _hazardService.initialize();
+      await _hazardService.startMonitoring(route: route);
+
+      // Initialize emergency service
+      await _emergencyService.initialize();
+
+      // Subscribe to emergency events
+      _setupEmergencyListener();
+
+      // Set up listeners for crossing and hazard events
+      _setupCrossingAndHazardListeners();
 
       // Update status and notify listeners
       _isMonitoring = true;
@@ -168,6 +203,153 @@ class NavigationMonitoringService {
       _reportError('Failed to start navigation: $e');
       return false;
     }
+  }
+
+  // Set up listener for emergency events
+  void _setupEmergencyListener() {
+    _emergencyService.emergencyStream.listen((event) {
+      // Forward emergency events to our stream
+      _emergencyController.add(event);
+
+      // Handle emergency based on action type
+      _handleEmergency(event);
+    });
+  }
+
+  // Handle emergency events
+  void _handleEmergency(EmergencyEvent event) {
+    switch (event.action) {
+      case EmergencyAction.stop:
+        _handleEmergencyStop(event);
+        break;
+      case EmergencyAction.reroute:
+        _handleEmergencyReroute(event);
+        break;
+      case EmergencyAction.detour:
+        _handleEmergencyDetour(event);
+        break;
+      case EmergencyAction.pause:
+        _handleEmergencyPause(event);
+        break;
+      case EmergencyAction.alertUser:
+        // Just forward to the stream, vibration handled by emergency service
+        break;
+      case EmergencyAction.slowDown:
+        // Just forward to the stream, vibration handled by emergency service
+        break;
+    }
+  }
+
+  // Handle emergency stop
+  void _handleEmergencyStop(EmergencyEvent event) {
+    // Stop all navigation immediately
+    _updateStatus(NavigationStatus.error);
+    _isOnRoute = false;
+
+    // Log the emergency stop
+    _reportError('Emergency stop: ${event.description}');
+  }
+
+  // Handle emergency reroute
+  Future<void> _handleEmergencyReroute(EmergencyEvent event) async {
+    if (_currentRoute == null || _currentPosition == null) {
+      _reportError('Cannot reroute: No active route or current position');
+      return;
+    }
+
+    // Update status to rerouting
+    _updateStatus(NavigationStatus.rerouting);
+    _reroutingController.add(true);
+
+    // Request emergency reroute
+    final newRoute = await _emergencyService.requestEmergencyReroute(
+      origin: _currentPosition!,
+      destination: _currentRoute!.destination.position,
+      reason: event.description,
+    );
+
+    if (newRoute != null) {
+      // Successfully rerouted
+      _currentRoute = newRoute;
+      _isOnRoute = true;
+      _updateStatus(NavigationStatus.active);
+      _reroutingController.add(false);
+
+      // Reset turn detection with new route
+      _turnDetectionService.stopTurnDetection();
+      await _turnDetectionService.startTurnDetection(newRoute);
+
+      // Resolve the emergency
+      _emergencyService.resolveEmergency(resolution: "Rerouted successfully");
+    } else {
+      // Failed to reroute
+      _reportError('Failed to calculate emergency reroute');
+      _updateStatus(NavigationStatus.error);
+    }
+  }
+
+  // Handle emergency detour around a specific area
+  Future<void> _handleEmergencyDetour(EmergencyEvent event) async {
+    if (_currentRoute == null || _currentPosition == null) {
+      _reportError('Cannot create detour: No active route or current position');
+      return;
+    }
+
+    // Update status to rerouting
+    _updateStatus(NavigationStatus.rerouting);
+    _reroutingController.add(true);
+
+    // If location is provided, add it as an area to avoid
+    if (event.location != null) {
+      _emergencyService.addAreaToAvoid(event.location!);
+    }
+
+    // Request emergency reroute with detour
+    final newRoute = await _emergencyService.requestEmergencyReroute(
+      origin: _currentPosition!,
+      destination: _currentRoute!.destination.position,
+      reason: "Detour: ${event.description}",
+    );
+
+    if (newRoute != null) {
+      // Successfully created detour
+      _currentRoute = newRoute;
+      _isOnRoute = true;
+      _updateStatus(NavigationStatus.active);
+      _reroutingController.add(false);
+
+      // Reset turn detection with new route
+      _turnDetectionService.stopTurnDetection();
+      await _turnDetectionService.startTurnDetection(newRoute);
+
+      // Resolve the emergency
+      _emergencyService.resolveEmergency(
+        resolution: "Detour created successfully",
+      );
+    } else {
+      // Failed to create detour
+      _reportError('Failed to calculate emergency detour');
+      _updateStatus(NavigationStatus.error);
+    }
+  }
+
+  // Handle emergency pause
+  void _handleEmergencyPause(EmergencyEvent event) {
+    // Temporarily stop providing updates but don't clear the route
+    _isMonitoring = false;
+    _updateStatus(NavigationStatus.idle);
+
+    // This is a temporary pause, so don't clear subscriptions
+    // We'll need to add a resume method later
+  }
+
+  // Emergency stop from external call
+  Future<void> emergencyStop(String reason) async {
+    if (!_isMonitoring) return;
+
+    await _emergencyService.initiateEmergencyStop(reason: reason);
+
+    // Stop will be handled by the emergency event handler
   }
 
   // Stop navigation and clean up resources
@@ -184,11 +366,36 @@ class NavigationMonitoringService {
     _turnDetectionService.stopTurnDetection();
     _vibrationService.stopVibration();
     _progressTracker.stopTracking();
+    _crossingDetectionService.stopMonitoring();
+    _hazardService.stopMonitoring();
+
+    // Clear any emergency states
+    _emergencyService.resolveEmergency(resolution: "Navigation stopped");
+    _emergencyService.clearAreasToAvoid();
 
     _isMonitoring = false;
     _currentRoute = null;
     _nextStep = null;
     _updateStatus(NavigationStatus.idle);
+  }
+
+  // Set up listeners for crossing and hazard events
+  void _setupCrossingAndHazardListeners() {
+    // Listen for crossing warnings
+    _crossingDetectionService.crossingWarningStream.listen((warning) {
+      // Forward to our stream
+      _crossingDetectedController.add(warning.crossing);
+
+      // Let the crossing service handle the vibration feedback
+    });
+
+    // Listen for hazard warnings
+    _hazardService.hazardWarningStream.listen((warning) {
+      // Forward to our stream
+      _hazardDetectedController.add(warning.hazard);
+
+      // Let the hazard service handle the vibration feedback
+    });
   }
 
   // Handle location updates during navigation
@@ -202,7 +409,7 @@ class NavigationMonitoringService {
 
     // Update the progress tracker
     _progressTracker.updatePosition(newPosition);
-    
+
     // Calculate current speed (in m/s)
     _currentSpeed = position.speed;
 
@@ -211,9 +418,19 @@ class NavigationMonitoringService {
 
     // Update navigation progress
     _updateNavigationProgress();
-    
+
     // Provide periodic on-route feedback if needed
     _providePeriodicFeedback();
+
+    // Update crossing detection
+    if (_crossingDetectionService.isMonitoring) {
+      _crossingDetectionService.updatePosition(newPosition);
+    }
+
+    // Update hazard detection
+    if (_hazardService.isMonitoring) {
+      _hazardService.updatePosition(newPosition);
+    }
   }
 
   // Check if the user has reached their destination
@@ -233,18 +450,20 @@ class NavigationMonitoringService {
     }
     return false;
   }
-  
+
   // Provide periodic feedback when on route
   void _providePeriodicFeedback() {
     if (!_isOnRoute) return; // Only provide feedback when on route
-    
+
     // Check if it's time for periodic feedback
     final now = DateTime.now();
-    if (_lastRouteFeedbackTime == null || 
-        now.difference(_lastRouteFeedbackTime!).inSeconds >= _routeFeedbackInterval) {
-      
+    if (_lastRouteFeedbackTime == null ||
+        now.difference(_lastRouteFeedbackTime!).inSeconds >=
+            _routeFeedbackInterval) {
       // Provide a gentle on-route feedback
-      _vibrationService.onRouteFeedback(intensity: VibrationService.lowIntensity);
+      _vibrationService.onRouteFeedback(
+        intensity: VibrationService.lowIntensity,
+      );
       _lastRouteFeedbackTime = now;
     }
   }
@@ -272,7 +491,7 @@ class NavigationMonitoringService {
       currentSpeed: _currentSpeed,
       timestamp: DateTime.now(),
     );
-    
+
     _progressUpdateController.add(progress);
   }
 
@@ -280,10 +499,10 @@ class NavigationMonitoringService {
   void _handleRouteDeviation(double deviation) {
     // Broadcast the deviation
     _routeDeviationController.add(deviation);
-    
+
     // Check if we're off route or back on route
     final isCurrentlyOnRoute = deviation <= _routeDeviationThreshold;
-    
+
     if (!isCurrentlyOnRoute && _isOnRoute) {
       // Just went off route
       _isOnRoute = false;
@@ -314,10 +533,12 @@ class NavigationMonitoringService {
           .inSeconds;
       if (timeSinceLastRerouting < _minReroutingInterval) return false;
     }
-    
+
     // Check if we've been off route long enough to justify rerouting
     if (_offRouteStartTime != null) {
-      final timeOffRoute = DateTime.now().difference(_offRouteStartTime!).inSeconds;
+      final timeOffRoute = DateTime.now()
+          .difference(_offRouteStartTime!)
+          .inSeconds;
       return timeOffRoute >= _maxOffRouteTimeBeforeRerouting;
     }
 
@@ -354,10 +575,10 @@ class NavigationMonitoringService {
   void _handleTurnNotification(TurnNotification notification) {
     // Store the next step
     _nextStep = notification.step;
-    
+
     // Forward to the upcoming turn stream
     _upcomingTurnController.add(notification.step);
-    
+
     // Vibration feedback is handled by the turn detection service
   }
 
@@ -409,6 +630,9 @@ class NavigationMonitoringService {
     _reroutingController.close();
     _progressUpdateController.close();
     _errorController.close();
+    _crossingDetectedController.close();
+    _hazardDetectedController.close();
+    _emergencyController.close();
   }
 }
 
@@ -423,7 +647,7 @@ class NavigationProgress {
   final int distanceToNextStep;
   final double currentSpeed;
   final DateTime timestamp;
-  
+
   NavigationProgress({
     required this.currentPosition,
     required this.distanceToDestination,
@@ -435,7 +659,7 @@ class NavigationProgress {
     required this.currentSpeed,
     required this.timestamp,
   });
-  
+
   String get distanceText {
     if (distanceToDestination < 1000) {
       return '$distanceToDestination m';
@@ -444,7 +668,7 @@ class NavigationProgress {
       return '${km.toStringAsFixed(1)} km';
     }
   }
-  
+
   String get timeText {
     final minutes = (estimatedTimeRemaining / 60).round();
     if (minutes < 60) {
@@ -455,11 +679,11 @@ class NavigationProgress {
       return '$hours hr ${remainingMinutes > 0 ? '$remainingMinutes min' : ''}';
     }
   }
-  
+
   String get percentageText {
     return '${(completionPercentage * 100).toStringAsFixed(0)}%';
   }
-  
+
   String get speedText {
     return '${(currentSpeed * 3.6).toStringAsFixed(1)} km/h';
   }
