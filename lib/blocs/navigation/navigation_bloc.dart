@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/route_information.dart';
 import '../../services/location_service.dart';
@@ -456,6 +457,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     if (state is NavigationActive) {
       final currentState = state as NavigationActive;
 
+      // Update UI to show rerouting status
       emit(
         NavigationRerouting(
           currentPosition: event.currentPosition,
@@ -464,8 +466,28 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
         ),
       );
 
-      // In a real implementation, we would start recalculating the route here
-      // For now, we'll just rely on the navigation service
+      // If we need to manually trigger rerouting here as well:
+      if (_navigationService.status != NavigationStatus.rerouting) {
+        // Get destination from current route
+        final destination = currentState.route.destination.position;
+
+        // Calculate a new route
+        _routingService
+            .calculateRoute(
+          event.currentPosition,
+          destination,
+          mode: TravelMode.walking,
+        )
+            .then((newRoute) {
+          if (newRoute != null) {
+            add(ReroutingComplete(newRoute));
+          } else {
+            add(ReroutingFailed("Couldn't calculate a new route"));
+          }
+        }).catchError((error) {
+          add(ReroutingFailed("Error: $error"));
+        });
+      }
     }
   }
 
@@ -473,20 +495,36 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     ReroutingComplete event,
     Emitter<NavigationState> emit,
   ) {
-    if (state is NavigationRerouting &&
-        _navigationService.currentPosition != null) {
+    if (state is NavigationRerouting) {
+      final currentPosition = _navigationService.currentPosition ??
+          (state as NavigationRerouting).currentPosition;
+
       // Update the map with the new route
       _mappingService.clearPolylines();
       _mappingService.addPolyline(
         id: 'route',
         points: event.newRoute.polylinePoints,
+        color: Colors.blue, // Make it visually distinct
+      );
+
+      // Update destination marker if needed
+      _mappingService.clearMarkers();
+      _mappingService.addMarker(
+        id: 'origin',
+        position: currentPosition,
+        title: 'Current Location',
+      );
+      _mappingService.addMarker(
+        id: 'destination',
+        position: event.newRoute.destination.position,
+        title: event.newRoute.destination.name,
       );
 
       // Resume active navigation with the new route
       emit(
         NavigationActive(
           destination: event.newRoute.destination.name,
-          currentPosition: _navigationService.currentPosition!,
+          currentPosition: currentPosition,
           route: event.newRoute,
           isOnRoute: true,
           distanceToDestination: event.newRoute.distanceMeters,
@@ -495,7 +533,10 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       );
 
       // Provide feedback that we're back on route
-      _vibrationService.onRouteFeedback();
+      _vibrationService.newRouteFeedback();
+
+      // Show the entire new route on the map
+      _mappingService.animateCameraToPosition(currentPosition, zoom: 15);
     }
   }
 

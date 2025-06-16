@@ -231,6 +231,32 @@ class RoutingService {
     return cleaned.trim();
   }
 
+  // Calculate a new route with improved rerouting options
+  Future<RouteInformation?> recalculateRoute({
+    required LatLng currentPosition,
+    required RouteInformation originalRoute,
+    bool avoidOriginalPath = false,
+  }) async {
+    try {
+      // Use the original destination
+      final destination = originalRoute.waypoints
+          .firstWhere((wp) => wp.type == WaypointType.destination)
+          .position;
+
+      // Use default travel mode since RouteInformation doesn't store it
+      final mode = TravelMode.walking;
+
+      return await calculateRoute(
+        currentPosition,
+        destination,
+        mode: mode,
+      );
+    } catch (e) {
+      debugPrint('Error recalculating route: $e');
+      return null;
+    }
+  }
+
   // Dispose resources
   void dispose() {
     _dio.close();

@@ -7,6 +7,7 @@ import '../models/street_crossing.dart';
 import '../models/hazard.dart';
 import '../services/emergency_service.dart';
 import '../services/vibration_service.dart';
+import '../services/routing_service.dart';
 
 enum NavigationStatus {
   idle,
@@ -408,18 +409,78 @@ class NavigationMonitoringService {
 
   // Trigger rerouting
   void _triggerRerouting(LatLng position, double deviation) {
+    if (_status == NavigationStatus.rerouting) return; // Already rerouting
+
     _status = NavigationStatus.rerouting;
     _statusController.add(_status);
     _reroutingController.add(true);
 
-    // In a real implementation, this would calculate a new route
-    // For now, we'll simulate rerouting completion after a delay
-    Timer(const Duration(seconds: 3), () {
-      _status = NavigationStatus.active;
+    // Provide haptic feedback to indicate rerouting
+    _vibrationService.wrongDirectionFeedback();
+
+    // Get the routing service to calculate a new route
+    final routingService = RoutingService();
+
+    // If we have a current route, use its destination
+    if (_currentRoute != null) {
+      final destination = _currentRoute!.destination.position;
+
+      debugPrint('Recalculating route from current position to destination');
+
+      routingService
+          .calculateRoute(
+        position,
+        destination,
+        mode: TravelMode.walking,
+      )
+          .then((newRoute) {
+        if (newRoute != null) {
+          // Update the current route
+          _currentRoute = newRoute;
+
+          // Reset route state
+          _isOnRoute = true;
+          _consecutiveOffRouteUpdates = 0;
+
+          // Update navigation state
+          _status = NavigationStatus.active;
+          _statusController.add(_status);
+
+          // Provide feedback that we're back on route
+          _vibrationService.newRouteFeedback();
+
+          debugPrint('Rerouting successful - new route calculated');
+        } else {
+          // Failed to calculate new route
+          debugPrint('Failed to calculate new route');
+          _errorController.add('Unable to calculate a new route');
+
+          // Return to active state but still off route
+          _status = NavigationStatus.active;
+          _statusController.add(_status);
+        }
+
+        // Signal that rerouting has finished (success or failure)
+        _reroutingController.add(false);
+      }).catchError((error) {
+        debugPrint('Error calculating new route: $error');
+        _errorController.add('Error calculating new route: $error');
+
+        // Return to active state but still off route
+        _status = NavigationStatus.active;
+        _statusController.add(_status);
+        _reroutingController.add(false);
+      });
+    } else {
+      // No current route to recalculate
+      debugPrint('Cannot reroute - no current route available');
+      _errorController.add('Cannot reroute - no current route available');
+
+      // Return to idle status
+      _status = NavigationStatus.idle;
       _statusController.add(_status);
       _reroutingController.add(false);
-      _isOnRoute = true;
-    });
+    }
   }
 
   // Pause navigation

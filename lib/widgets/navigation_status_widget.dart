@@ -17,10 +17,64 @@ class NavigationStatusWidget extends StatelessWidget {
     this.onTap,
   });
 
+  // Add a method to show rerouting status
+  Widget _buildReroutingIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Recalculating route...',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<NavigationBloc, NavigationState>(
       builder: (context, state) {
+        // Add rerouting state handling
+        if (state is NavigationRerouting) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            color: Colors.black.withValues(alpha: 0.7),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildReroutingIndicator(),
+                const SizedBox(height: 8),
+                Text(
+                  'Finding new route to ${state.destination}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          );
+        }
+
         if (state is NavigationIdle) {
           return const SizedBox.shrink();
         }

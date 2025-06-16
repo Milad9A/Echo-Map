@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Color;
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../utils/navigation_utilities.dart';
@@ -392,6 +391,61 @@ class MappingService {
 
     // Stop monitoring if we're clearing the route
     stopDeviationMonitoring();
+  }
+
+  // Add a method to update a route without removing all polylines
+  Future<void> updateRoutePolyline({
+    required String id,
+    required List<LatLng> points,
+    int width = MapConfig.routeLineWidth,
+    Color? color,
+  }) async {
+    // Remove existing route with this ID
+    _polylines.removeWhere((polyline) => polyline.polylineId.value == id);
+
+    // Add the new route
+    color ??= Color(MapConfig.routeLineColor);
+    final polyline = Polyline(
+      polylineId: PolylineId(id),
+      points: points,
+      width: width,
+      color: color,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+    );
+
+    _polylines.add(polyline);
+    _polylinesController.add(_polylines);
+
+    // Store the route points for deviation detection
+    if (id == 'route') {
+      _activeRoutePoints = List.from(points);
+    }
+  }
+
+  // Method to highlight a section of a route (useful for showing the current segment)
+  Future<void> highlightRouteSegment({
+    required List<LatLng> points,
+    int width = MapConfig.routeLineWidth + 2,
+    Color color = Colors.green,
+  }) async {
+    final polyline = Polyline(
+      polylineId: const PolylineId('current_segment'),
+      points: points,
+      width: width,
+      color: color,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+      zIndex: 2, // Put it above the main route
+    );
+
+    // Remove existing highlight if any
+    _polylines.removeWhere(
+      (p) => p.polylineId.value == 'current_segment',
+    );
+
+    _polylines.add(polyline);
+    _polylinesController.add(_polylines);
   }
 
   // Start monitoring for route deviation
