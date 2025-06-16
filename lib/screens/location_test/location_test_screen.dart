@@ -87,25 +87,32 @@ class _LocationTestScreenState extends State<LocationTestScreen> {
 
                     const SizedBox(height: 16),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    // Fixed button layout with proper spacing
+                    Column(
                       children: [
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<LocationBloc>().add(
-                              LocationStart(
-                                trackHistory: _historyTracking,
-                                inBackground: _backgroundMode,
-                              ),
-                            );
-                          },
-                          child: const Text('Start Tracking'),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              context.read<LocationBloc>().add(
+                                    LocationStart(
+                                      trackHistory: _historyTracking,
+                                      inBackground: _backgroundMode,
+                                    ),
+                                  );
+                            },
+                            child: const Text('Start Tracking'),
+                          ),
                         ),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<LocationBloc>().add(LocationStop());
-                          },
-                          child: const Text('Stop Tracking'),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              context.read<LocationBloc>().add(LocationStop());
+                            },
+                            child: const Text('Stop Tracking'),
+                          ),
                         ),
                       ],
                     ),
@@ -145,13 +152,16 @@ class _LocationTestScreenState extends State<LocationTestScreen> {
                           // - Duration
                           // - etc.
                           const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              context.read<LocationBloc>().add(
-                                LocationHistoryClear(),
-                              );
-                            },
-                            child: const Text('Clear Path History'),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                context.read<LocationBloc>().add(
+                                      LocationHistoryClear(),
+                                    );
+                              },
+                              child: const Text('Clear Path History'),
+                            ),
                           ),
                         ],
                       ),

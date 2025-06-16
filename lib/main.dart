@@ -78,9 +78,9 @@ class EchoMapApp extends StatelessWidget {
         routes: {
           '/': (context) => const HomeScreen(),
           '/map': (context) => const MapScreen(),
+          '/settings': (context) => const SettingsScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
           '/location_test': (context) => const LocationTestScreen(),
-          '/settings': (context) => const SettingsScreen(),
         },
       ),
     );

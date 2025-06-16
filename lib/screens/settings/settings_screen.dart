@@ -135,6 +135,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: const Text('Test Vibration Patterns'),
                   ),
 
+                  const SizedBox(height: ThemeConfig.smallPadding),
+
+                  // Test location services
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/location_test');
+                    },
+                    child: const Text('Test Location Services'),
+                  ),
+
                   const Divider(),
 
                   // Voice settings
@@ -234,10 +244,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () async {
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
               Navigator.pop(context);
               await _settingsService.resetToDefaults();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                scaffoldMessenger.showSnackBar(
                   const SnackBar(content: Text('Settings reset to defaults')),
                 );
               }

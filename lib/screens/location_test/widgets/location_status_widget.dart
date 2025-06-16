@@ -30,7 +30,6 @@ class LocationStatusWidget extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-
                 if (state is LocationTracking) ...[
                   Text(
                     'Latitude: ${state.currentPosition.latitude.toStringAsFixed(6)}',
@@ -49,7 +48,6 @@ class LocationStatusWidget extends StatelessWidget {
                       'Speed: ${(state.currentPosition.speed * 3.6).toStringAsFixed(1)} km/h',
                       style: const TextStyle(fontSize: 14),
                     ),
-
                   if (showHistory &&
                       state.isTrackingHistory &&
                       state.pathHistory != null)
@@ -65,7 +63,6 @@ class LocationStatusWidget extends StatelessWidget {
                     style: const TextStyle(fontSize: 14),
                   ),
                 ],
-
                 if (showControls) ...[
                   const SizedBox(height: 16),
                   _buildControls(context, state),
@@ -95,64 +92,90 @@ class LocationStatusWidget extends StatelessWidget {
     final bloc = BlocProvider.of<LocationBloc>(context);
 
     if (state is LocationPermissionDenied) {
-      return ElevatedButton(
-        onPressed: () => bloc.add(LocationPermissionRequest()),
-        child: const Text('Grant Permission'),
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: () => bloc.add(LocationPermissionRequest()),
+          child: const Text('Grant Permission'),
+        ),
       );
     }
 
     if (state is LocationPermissionPermanentlyDenied) {
-      return ElevatedButton(
-        onPressed: () =>
-            bloc.add(const LocationOpenSettings(appSettings: true)),
-        child: const Text('Open App Settings'),
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: () =>
+              bloc.add(const LocationOpenSettings(appSettings: true)),
+          child: const Text('Open App Settings'),
+        ),
       );
     }
 
     if (state is LocationServiceDisabled) {
-      return ElevatedButton(
-        onPressed: () => bloc.add(const LocationOpenSettings()),
-        child: const Text('Enable Location Services'),
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: () => bloc.add(const LocationOpenSettings()),
+          child: const Text('Enable Location Services'),
+        ),
       );
     }
 
     if (state is LocationReady) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      return Column(
         children: [
-          ElevatedButton(
-            onPressed: () => bloc.add(const LocationStart(trackHistory: true)),
-            child: const Text('Start Tracking'),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () =>
+                  bloc.add(const LocationStart(trackHistory: true)),
+              child: const Text('Start Tracking'),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () => bloc.add(LocationPermissionRequest()),
-            child: const Text('Check Permission'),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => bloc.add(LocationPermissionRequest()),
+              child: const Text('Check Permission'),
+            ),
           ),
         ],
       );
     }
 
     if (state is LocationTracking) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      return Column(
         children: [
-          ElevatedButton(
-            onPressed: () => bloc.add(LocationStop()),
-            child: const Text('Stop Tracking'),
-          ),
-          if (showHistory && state.isTrackingHistory)
-            ElevatedButton(
-              onPressed: () => bloc.add(LocationHistoryClear()),
-              child: const Text('Clear History'),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => bloc.add(LocationStop()),
+              child: const Text('Stop Tracking'),
             ),
+          ),
+          if (showHistory && state.isTrackingHistory) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => bloc.add(LocationHistoryClear()),
+                child: const Text('Clear History'),
+              ),
+            ),
+          ],
         ],
       );
     }
 
     // Default case for other states
-    return ElevatedButton(
-      onPressed: () => bloc.add(LocationInitialize()),
-      child: const Text('Initialize Location'),
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () => bloc.add(LocationInitialize()),
+        child: const Text('Initialize Location'),
+      ),
     );
   }
 }

@@ -40,14 +40,14 @@ class ComparisonTestSection extends StatelessWidget {
                     isExpanded: true,
                     value: selectedPattern1,
                     onChanged: onPattern1Changed,
+                    style: const TextStyle(fontSize: 16),
                     items: VibrationService.patterns.keys
                         .map<DropdownMenuItem<String>>((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        })
-                        .toList(),
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -56,14 +56,14 @@ class ComparisonTestSection extends StatelessWidget {
                     isExpanded: true,
                     value: selectedPattern2,
                     onChanged: onPattern2Changed,
+                    style: const TextStyle(fontSize: 16),
                     items: VibrationService.patterns.keys
                         .map<DropdownMenuItem<String>>((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        })
-                        .toList(),
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
                   ),
                 ),
               ],
