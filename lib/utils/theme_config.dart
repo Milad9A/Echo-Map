@@ -21,7 +21,8 @@ class ThemeConfig {
 
   // Text colors
   static const Color textPrimaryLight = Color(0xFF000000); // Black
-  static const Color textSecondaryLight = Color(0xFF333333); // Dark gray
+  static const Color textSecondaryLight =
+      Color.fromARGB(255, 145, 142, 142); // Dark gray
   static const Color textPrimaryDark = Color(0xFFFFFFFF); // White
   static const Color textSecondaryDark = Color(0xFFCCCCCC); // Light gray
 
