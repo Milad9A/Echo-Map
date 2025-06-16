@@ -15,9 +15,9 @@ class LocationHistoryService {
   final LocationService _locationService = LocationService();
 
   // Configuration
-  int _maxHistoryLength = 100;
-  Duration _minTimeBetweenPoints = const Duration(seconds: 5);
-  double _minDistanceBetweenPoints = 5.0; // meters
+  int _maxHistoryLength = 200; // Increased from 100
+  Duration _minTimeBetweenPoints = const Duration(seconds: 2); // Reduced from 5
+  double _minDistanceBetweenPoints = 2.0; // Reduced from 5.0 meters
 
   // Location history storage
   final Queue<PositionRecord> _locationHistory = Queue<PositionRecord>();
@@ -207,7 +207,6 @@ class PositionRecord {
   PositionRecord({required this.position, required this.timestamp});
 
   @override
-  String toString() =>
-      'PositionRecord(lat: ${position.latitude}, '
+  String toString() => 'PositionRecord(lat: ${position.latitude}, '
       'lng: ${position.longitude}, time: $timestamp)';
 }

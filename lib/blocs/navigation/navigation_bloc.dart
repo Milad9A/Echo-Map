@@ -221,10 +221,12 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       LatLng? destinationLatLng;
 
       try {
-        final geocodingResults = await _geocodingService.geocodeAddress(event.destination);
-        
+        final geocodingResults =
+            await _geocodingService.geocodeAddress(event.destination);
+
         if (geocodingResults.isEmpty) {
-          emit(NavigationError(message: "Destination '${event.destination}' not found"));
+          emit(NavigationError(
+              message: "Destination '${event.destination}' not found"));
           return;
         }
 
@@ -237,7 +239,6 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
           emit(NavigationError(message: "Invalid destination coordinates"));
           return;
         }
-
       } catch (e) {
         emit(NavigationError(message: "Failed to find destination: $e"));
         return;
@@ -251,7 +252,8 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       );
 
       if (route == null) {
-        emit(NavigationError(message: "Couldn't calculate route to destination"));
+        emit(NavigationError(
+            message: "Couldn't calculate route to destination"));
         return;
       }
 

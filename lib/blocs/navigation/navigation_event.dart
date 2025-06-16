@@ -207,11 +207,11 @@ class EmergencyEventReceived extends NavigationEvent {
 
   @override
   List<Object> get props => [
-    type,
-    action,
-    description,
-    if (location != null) location!,
-  ];
+        type,
+        action,
+        description,
+        if (location != null) location!,
+      ];
 }
 
 class EmergencyResolved extends NavigationEvent {

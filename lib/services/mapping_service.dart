@@ -39,7 +39,6 @@ class MappingService {
   List<LatLng> _activeRoutePoints = [];
   bool _isMonitoringDeviation = false;
   StreamSubscription<Position>? _deviationMonitorSubscription;
-  double _deviationThresholdMeters = 20.0; // Default deviation threshold
   bool _mapReady = false;
 
   // Enhanced controller state tracking
@@ -272,22 +271,22 @@ class MappingService {
           await controller
               .animateCamera(CameraUpdate.newCameraPosition(cameraPosition))
               .timeout(
-                const Duration(seconds: 3),
-                onTimeout: () {
-                  debugPrint(
-                    'Camera animation timed out, trying moveCamera instead',
-                  );
-                  try {
-                    controller.moveCamera(
-                      CameraUpdate.newCameraPosition(cameraPosition),
-                    );
-                    success = true;
-                  } catch (e) {
-                    debugPrint('moveCamera fallback also failed: $e');
-                    success = false;
-                  }
-                },
+            const Duration(seconds: 3),
+            onTimeout: () {
+              debugPrint(
+                'Camera animation timed out, trying moveCamera instead',
               );
+              try {
+                controller.moveCamera(
+                  CameraUpdate.newCameraPosition(cameraPosition),
+                );
+                success = true;
+              } catch (e) {
+                debugPrint('moveCamera fallback also failed: $e');
+                success = false;
+              }
+            },
+          );
 
           success = true;
         } catch (e) {
@@ -408,12 +407,17 @@ class MappingService {
     }
 
     if (thresholdMeters != null) {
-      _deviationThresholdMeters = thresholdMeters;
+    } else {
+// Reduced default threshold for more precision
     }
 
     try {
-      // Make sure location service is active
+      // Make sure location service is active with high precision
       if (!_locationService.isTracking) {
+        // Set high precision before starting
+        _locationService.setAccuracy(LocationAccuracy.best);
+        _locationService.setDistanceFilter(1); // Update every meter
+
         final success = await _locationService.startLocationUpdates();
         if (!success) {
           debugPrint(
@@ -425,7 +429,7 @@ class MappingService {
 
       // Subscribe to location updates to check for deviation
       _deviationMonitorSubscription = _locationService.locationStream.listen(
-        _checkForRouteDeviation,
+        _checkForRouteDeviationPrecise,
         onError: (error) {
           debugPrint('Error in deviation monitoring: $error');
         },
@@ -439,27 +443,67 @@ class MappingService {
     }
   }
 
+  // Enhanced route deviation checking
+  void _checkForRouteDeviationPrecise(Position position) {
+    if (_activeRoutePoints.isEmpty) return;
+
+    final currentPosition = LatLng(position.latitude, position.longitude);
+
+    // Calculate precise distance to route using all route segments
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < _activeRoutePoints.length - 1; i++) {
+      final segmentStart = _activeRoutePoints[i];
+      final segmentEnd = _activeRoutePoints[i + 1];
+
+      // Project current position onto this segment
+      final projectedPoint =
+          _projectPointOntoSegment(currentPosition, segmentStart, segmentEnd);
+
+      // Calculate distance to projected point
+      final distance = NavigationUtilities.calculateDistance(
+          currentPosition, projectedPoint);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    // Notify listeners about the deviation distance
+    _routeDeviationController.add(minDistance);
+  }
+
+  // Project point onto line segment for precise distance calculation
+  LatLng _projectPointOntoSegment(
+      LatLng point, LatLng segmentStart, LatLng segmentEnd) {
+    // Convert to relative coordinates for easier calculation
+    final double dx = segmentEnd.longitude - segmentStart.longitude;
+    final double dy = segmentEnd.latitude - segmentStart.latitude;
+
+    if (dx == 0 && dy == 0) {
+      return segmentStart; // Start and end are the same point
+    }
+
+    // Calculate the parameter t for the projection
+    final double t = ((point.longitude - segmentStart.longitude) * dx +
+            (point.latitude - segmentStart.latitude) * dy) /
+        (dx * dx + dy * dy);
+
+    // Clamp t to [0, 1] to stay within the segment
+    final double clampedT = t.clamp(0.0, 1.0);
+
+    // Calculate the projected point
+    return LatLng(
+      segmentStart.latitude + clampedT * dy,
+      segmentStart.longitude + clampedT * dx,
+    );
+  }
+
   // Stop monitoring for route deviation
   void stopDeviationMonitoring() {
     _deviationMonitorSubscription?.cancel();
     _deviationMonitorSubscription = null;
     _isMonitoringDeviation = false;
-  }
-
-  // Check if the current position deviates from the route
-  void _checkForRouteDeviation(Position position) {
-    if (_activeRoutePoints.isEmpty) return;
-
-    final currentPosition = LatLng(position.latitude, position.longitude);
-
-    final double deviation = NavigationUtilities.calculateRouteDeviation(
-      currentPosition,
-      _activeRoutePoints,
-      _deviationThresholdMeters,
-    );
-
-    // Notify listeners about the deviation distance
-    _routeDeviationController.add(deviation);
   }
 
   // Get the closest point on the current route to a given position

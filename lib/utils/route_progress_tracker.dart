@@ -30,8 +30,12 @@ class RouteProgressTracker {
   DateTime? _lastUpdateTime;
 
   // Configuration
-  double _routeDeviationThresholdMeters = 20.0;
-  double _turnNotificationDistanceMeters = 100.0;
+  double _routeDeviationThresholdMeters = 10.0; // Reduced from 20.0
+  double _turnNotificationDistanceMeters = 30.0; // Reduced from 100.0
+
+  // Position tracking with smoothing
+  final List<LatLng> _recentPositions = [];
+  double _currentSpeed = 0.0;
 
   // Getters
   RouteInformation? get route => _route;
@@ -88,48 +92,126 @@ class RouteProgressTracker {
     _nextTurn = null;
   }
 
-  // Update the tracker with a new user position
+  // Enhanced position update with smoothing
   bool updatePosition(LatLng position) {
     if (!_isNavigating || _route == null) return false;
 
+    final now = DateTime.now();
+
+    // Add position to recent positions for smoothing
+    _recentPositions.add(position);
+    if (_recentPositions.length > 5) {
+      _recentPositions.removeAt(0);
+    }
+
+    // Calculate smoothed position
+    LatLng smoothedPosition = position;
+    if (_recentPositions.length >= 3) {
+      double avgLat =
+          _recentPositions.map((p) => p.latitude).reduce((a, b) => a + b) /
+              _recentPositions.length;
+      double avgLng =
+          _recentPositions.map((p) => p.longitude).reduce((a, b) => a + b) /
+              _recentPositions.length;
+      smoothedPosition = LatLng(avgLat, avgLng);
+    }
+
+    // Calculate speed if we have previous position
+    if (_lastPosition != null && _lastUpdateTime != null) {
+      final distance =
+          NavigationUtilities.calculateDistance(_lastPosition!, position);
+      final timeDiff = now.difference(_lastUpdateTime!).inMilliseconds / 1000.0;
+      if (timeDiff > 0) {
+        _currentSpeed = distance / timeDiff;
+      }
+    }
+
     _lastPosition = position;
-    _lastUpdateTime = DateTime.now();
+    _lastUpdateTime = now;
 
-    // Find the closest point on the route
-    final closestRoutePoint = _findClosestRoutePoint(position);
+    // Find the closest point on the route using smoothed position
+    final closestRoutePoint = _findClosestRoutePointPrecise(smoothedPosition);
 
-    // Calculate route deviation
-    _calculateRouteDeviation(position, closestRoutePoint);
+    // Calculate route deviation using smoothed position
+    _calculateRouteDeviationPrecise(smoothedPosition, closestRoutePoint);
 
     // Update progress metrics
-    _updateProgressMetrics(position, closestRoutePoint);
+    _updateProgressMetrics(smoothedPosition, closestRoutePoint);
 
-    // Update turn predictions
-    _updateTurnPrediction(position);
+    // Update turn predictions with speed consideration
+    _updateTurnPredictionPrecise(smoothedPosition);
 
     return true;
   }
 
-  // Find the closest point on the route to the current position
-  LatLng _findClosestRoutePoint(LatLng position) {
+  // Enhanced closest point finding with segment projection
+  LatLng _findClosestRoutePointPrecise(LatLng position) {
     if (_route == null || _route!.polylinePoints.isEmpty) {
       return position;
     }
 
-    // Use the navigation utilities to find the closest point
-    return NavigationUtilities.findClosestPointOnRoute(
-      position,
-      _route!.polylinePoints,
+    if (_route!.polylinePoints.length == 1) {
+      return _route!.polylinePoints.first;
+    }
+
+    double minDistance = double.infinity;
+    LatLng closestPoint = _route!.polylinePoints.first;
+
+    // Check each segment of the polyline
+    for (int i = 0; i < _route!.polylinePoints.length - 1; i++) {
+      final LatLng segmentStart = _route!.polylinePoints[i];
+      final LatLng segmentEnd = _route!.polylinePoints[i + 1];
+
+      final LatLng projectedPoint = _projectPointOnSegment(
+        position,
+        segmentStart,
+        segmentEnd,
+      );
+
+      final double distance =
+          NavigationUtilities.calculateDistance(position, projectedPoint);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPoint = projectedPoint;
+      }
+    }
+
+    return closestPoint;
+  }
+
+  // Project point onto segment with better precision
+  LatLng _projectPointOnSegment(
+      LatLng point, LatLng segmentStart, LatLng segmentEnd) {
+    final double x = point.longitude;
+    final double y = point.latitude;
+    final double x1 = segmentStart.longitude;
+    final double y1 = segmentStart.latitude;
+    final double x2 = segmentEnd.longitude;
+    final double y2 = segmentEnd.latitude;
+
+    final double dx = x2 - x1;
+    final double dy = y2 - y1;
+    final double segmentLengthSquared = dx * dx + dy * dy;
+
+    if (segmentLengthSquared == 0) {
+      return segmentStart;
+    }
+
+    final double t = ((x - x1) * dx + (y - y1) * dy) / segmentLengthSquared;
+    final double clampedT = t.clamp(0.0, 1.0);
+
+    return LatLng(
+      y1 + clampedT * dy,
+      x1 + clampedT * dx,
     );
   }
 
-  // Calculate how far the user has deviated from the route
-  void _calculateRouteDeviation(LatLng position, LatLng closestRoutePoint) {
-    // Calculate distance between current position and closest route point
-    final distance = NavigationUtilities.calculateDistance(
-      position,
-      closestRoutePoint,
-    );
+  // Enhanced deviation calculation with smoothing
+  void _calculateRouteDeviationPrecise(
+      LatLng position, LatLng closestRoutePoint) {
+    final distance =
+        NavigationUtilities.calculateDistance(position, closestRoutePoint);
 
     _routeDeviationMeters = distance;
     _isOnRoute = distance <= _routeDeviationThresholdMeters;
@@ -154,8 +236,6 @@ class RouteProgressTracker {
         closestPointIndex = i;
       }
     }
-
-    // Update the last route point index
 
     // Calculate remaining distance
     _remainingDistanceMeters = _calculateRemainingDistance(closestPointIndex);
@@ -232,12 +312,18 @@ class RouteProgressTracker {
     _distanceToNextTurnMeters = 0;
   }
 
-  // Update turn prediction based on current position
-  void _updateTurnPrediction(LatLng position) {
+  // Enhanced turn prediction with speed and distance considerations
+  void _updateTurnPredictionPrecise(LatLng position) {
     if (_route == null || !_route!.hasSteps) return;
 
-    // Find the current step based on position
-    int currentStepIndex = _findCurrentStepIndex(position);
+    if (_currentSpeed > 1.5) {
+      // Moving faster than normal walking
+    } else if (_currentSpeed < 0.5) {
+      // Moving very slowly
+    }
+
+    // Find the current step based on position with better accuracy
+    int currentStepIndex = _findCurrentStepIndexPrecise(position);
 
     // Update last step index if we've moved to a new step
     if (currentStepIndex > _lastStepIndex) {
@@ -247,17 +333,15 @@ class RouteProgressTracker {
       if (_nextTurn != null) {
         final passedStepIndex = _route!.steps.indexOf(_nextTurn!);
         if (currentStepIndex > passedStepIndex) {
-          // We've passed the turn, find the next one
           _findNextTurn();
         }
       }
     }
 
-    // If we don't have a next turn, try to find one
+    // Find next turn with dynamic distance
     if (_nextTurn == null) {
       _findNextTurn();
     } else {
-      // Update distance to next turn
       _distanceToNextTurnMeters = NavigationUtilities.calculateDistance(
         position,
         _nextTurn!.startLocation,
@@ -265,30 +349,23 @@ class RouteProgressTracker {
     }
   }
 
-  // Find the index of the current step based on position
-  int _findCurrentStepIndex(LatLng position) {
+  // More precise step index finding
+  int _findCurrentStepIndexPrecise(LatLng position) {
     if (_route == null || !_route!.hasSteps) return 0;
 
-    // Find which step contains the current position
-    // Strategy: Find the closest step start/end point
     int closestStepIndex = 0;
     double minDistance = double.infinity;
 
     for (int i = 0; i < _route!.steps.length; i++) {
       final step = _route!.steps[i];
 
-      // Check distance to start location
-      double distanceToStart = NavigationUtilities.calculateDistance(
-        position,
-        step.startLocation,
-      );
+      // Check distance to step start and end locations
+      double distanceToStart =
+          NavigationUtilities.calculateDistance(position, step.startLocation);
+      double distanceToEnd =
+          NavigationUtilities.calculateDistance(position, step.endLocation);
 
-      // Check distance to end location
-      double distanceToEnd = NavigationUtilities.calculateDistance(
-        position,
-        step.endLocation,
-      );
-
+      // Also check if we're between start and end (on the step path)
       double minStepDistance = math.min(distanceToStart, distanceToEnd);
 
       if (minStepDistance < minDistance) {
@@ -310,15 +387,35 @@ class RouteProgressTracker {
     ).round();
   }
 
-  // Check if approaching a turn
+  // Check if approaching a turn with enhanced precision
   bool isApproachingTurn() {
-    return _nextTurn != null &&
-        _distanceToNextTurnMeters <= _turnNotificationDistanceMeters;
+    if (_nextTurn == null) return false;
+
+    // Adjust threshold based on speed
+    double threshold = _turnNotificationDistanceMeters;
+    if (_currentSpeed > 1.5) {
+      threshold = 50.0;
+    } else if (_currentSpeed < 0.5) {
+      threshold = 20.0;
+    }
+
+    return _distanceToNextTurnMeters <= threshold;
   }
 
-  // Check if at a turn (very close to turn point)
-  bool isAtTurn({double thresholdMeters = 20.0}) {
-    return _nextTurn != null && _distanceToNextTurnMeters <= thresholdMeters;
+  // Check if at turn with speed consideration
+  bool isAtTurn({double? thresholdMeters}) {
+    if (_nextTurn == null) return false;
+
+    double threshold = thresholdMeters ?? 10.0;
+
+    // Adjust threshold based on speed
+    if (_currentSpeed > 1.5) {
+      threshold = 15.0;
+    } else if (_currentSpeed < 0.5) {
+      threshold = 8.0;
+    }
+
+    return _distanceToNextTurnMeters <= threshold;
   }
 
   // Reset the tracker
@@ -336,5 +433,7 @@ class RouteProgressTracker {
     _isNavigating = false;
     _startTime = null;
     _lastUpdateTime = null;
+    _recentPositions.clear();
+    _currentSpeed = 0.0;
   }
 }

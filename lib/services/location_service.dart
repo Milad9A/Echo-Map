@@ -31,9 +31,10 @@ class LocationService {
 
   Position? _lastPosition;
   LocationStatus _currentStatus = LocationStatus.initial;
-  LocationAccuracy _currentAccuracy = LocationAccuracy.high;
+  LocationAccuracy _currentAccuracy =
+      LocationAccuracy.best; // Changed from high to best
   bool _inBackground = false;
-  int _distanceFilter = 5; // in meters
+  int _distanceFilter = 1; // Changed from 5 to 1 meter for more precision
 
   // Public access to streams
   Stream<Position> get locationStream => _locationController.stream;
@@ -139,8 +140,9 @@ class LocationService {
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: LocationSettings(
-          accuracy: _currentAccuracy,
-          timeLimit: const Duration(seconds: 15),
+          accuracy:
+              LocationAccuracy.best, // Always use best for single requests
+          timeLimit: const Duration(seconds: 10), // Reduced timeout
         ),
       );
       _lastPosition = position;
@@ -183,6 +185,8 @@ class LocationService {
           ? AndroidSettings(
               accuracy: _currentAccuracy,
               distanceFilter: _distanceFilter,
+              intervalDuration: const Duration(
+                  milliseconds: 500), // Update every 500ms in background
               foregroundNotificationConfig: const ForegroundNotificationConfig(
                 notificationText:
                     "EchoMap is using your location in the background",
@@ -193,38 +197,77 @@ class LocationService {
           : LocationSettings(
               accuracy: _currentAccuracy,
               distanceFilter: _distanceFilter,
-              timeLimit: const Duration(seconds: 30),
+              timeLimit:
+                  const Duration(seconds: 10), // Reduced from 30 to 10 seconds
             );
 
-      // Start the position stream
-      _positionStreamSubscription =
-          Geolocator.getPositionStream(
-            locationSettings: locationSettings,
-          ).listen(
-            (Position position) {
-              _lastPosition = position;
-              _locationController.add(position);
-              _updateStatus(LocationStatus.active);
-            },
-            onError: (error) {
-              // Handle specific errors
-              if (error is LocationServiceDisabledException) {
-                _updateStatus(LocationStatus.serviceDisabled);
-              } else if (error is PermissionDeniedException) {
-                _updateStatus(LocationStatus.permissionDenied);
-              } else {
-                debugPrint('Location stream error: $error');
-                _updateStatus(LocationStatus.error);
-              }
-            },
-            onDone: () {
-              // Stream completed - might happen if service is stopped
-              if (_currentStatus == LocationStatus.active) {
-                _updateStatus(LocationStatus.ready);
-              }
-            },
-            cancelOnError: false, // Don't cancel on error, let us handle it
-          );
+      // For iOS, use more frequent updates
+      if (!_inBackground) {
+        final iosSettings = AppleSettings(
+          accuracy: _currentAccuracy,
+          activityType: ActivityType.other,
+          distanceFilter: _distanceFilter,
+          pauseLocationUpdatesAutomatically: false,
+          showBackgroundLocationIndicator: true,
+        );
+
+        _positionStreamSubscription = Geolocator.getPositionStream(
+          locationSettings: iosSettings,
+        ).listen(
+          (Position position) {
+            _lastPosition = position;
+            _locationController.add(position);
+            _updateStatus(LocationStatus.active);
+          },
+          onError: (error) {
+            // Handle specific errors
+            if (error is LocationServiceDisabledException) {
+              _updateStatus(LocationStatus.serviceDisabled);
+            } else if (error is PermissionDeniedException) {
+              _updateStatus(LocationStatus.permissionDenied);
+            } else {
+              debugPrint('Location stream error: $error');
+              _updateStatus(LocationStatus.error);
+            }
+          },
+          onDone: () {
+            // Stream completed - might happen if service is stopped
+            if (_currentStatus == LocationStatus.active) {
+              _updateStatus(LocationStatus.ready);
+            }
+          },
+          cancelOnError: false, // Don't cancel on error, let us handle it
+        );
+      } else {
+        // Use Android/general settings for background
+        _positionStreamSubscription = Geolocator.getPositionStream(
+          locationSettings: locationSettings,
+        ).listen(
+          (Position position) {
+            _lastPosition = position;
+            _locationController.add(position);
+            _updateStatus(LocationStatus.active);
+          },
+          onError: (error) {
+            // Handle specific errors
+            if (error is LocationServiceDisabledException) {
+              _updateStatus(LocationStatus.serviceDisabled);
+            } else if (error is PermissionDeniedException) {
+              _updateStatus(LocationStatus.permissionDenied);
+            } else {
+              debugPrint('Location stream error: $error');
+              _updateStatus(LocationStatus.error);
+            }
+          },
+          onDone: () {
+            // Stream completed - might happen if service is stopped
+            if (_currentStatus == LocationStatus.active) {
+              _updateStatus(LocationStatus.ready);
+            }
+          },
+          cancelOnError: false, // Don't cancel on error, let us handle it
+        );
+      }
 
       return true;
     } catch (e) {
