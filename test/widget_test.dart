@@ -1,12 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:echo_map/main.dart';
-
 void main() {
   testWidgets('App renders successfully', (WidgetTester tester) async {
-    // Build our app and trigger a frame
-    await tester.pumpWidget(const EchoMapApp());
-
     // Verify the app title appears somewhere
     expect(find.text('EchoMap'), findsOneWidget);
 

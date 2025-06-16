@@ -5,6 +5,7 @@ import '../../utils/theme_config.dart';
 import 'widgets/section_header.dart';
 import 'widgets/settings_item.dart';
 import 'widgets/vibration_intensity_setting.dart';
+import 'widgets/theme_selector.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -77,12 +78,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(ThemeConfig.standardPadding),
                 children: [
+                  // Appearance section
+                  const SectionHeader(title: 'Appearance'),
+
+                  // Theme selector
+                  ThemeSelector(
+                    currentTheme:
+                        _appThemeModeToThemeMode(_currentSettings.themeMode),
+                    onThemeChanged: (theme) {
+                      _settingsService
+                          .setThemeMode(_themeModeToAppThemeMode(theme));
+                    },
+                  ),
+
+                  const Divider(),
+
                   // Accessibility settings
                   const SectionHeader(title: 'Accessibility'),
 
                   SettingsItem(
                     title: 'High Contrast Mode',
-                    subtitle: 'Use colors that are easier to distinguish',
+                    subtitle: 'Enhance color contrast for better visibility',
                     value: _currentSettings.highContrastMode,
                     onChanged: (value) {
                       _settingsService.setHighContrastMode(value);
@@ -90,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
 
                   SettingsItem(
-                    title: 'Large Font Size',
+                    title: 'Large Text Size',
                     subtitle: 'Increase text size throughout the app',
                     value: _currentSettings.largeFontSize,
                     onChanged: (value) {
@@ -314,5 +330,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  ThemeMode _appThemeModeToThemeMode(AppThemeMode appThemeMode) {
+    switch (appThemeMode) {
+      case AppThemeMode.light:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+        return ThemeMode.dark;
+      case AppThemeMode.system:
+        return ThemeMode.system;
+    }
+  }
+
+  AppThemeMode _themeModeToAppThemeMode(ThemeMode themeMode) {
+    switch (themeMode) {
+      case ThemeMode.light:
+        return AppThemeMode.light;
+      case ThemeMode.dark:
+        return AppThemeMode.dark;
+      case ThemeMode.system:
+        return AppThemeMode.system;
+    }
   }
 }

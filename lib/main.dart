@@ -53,30 +53,68 @@ void main() async {
   await recentPlacesService.initialize();
 
   // Initialize settings service
-  await SettingsService().initialize();
+  final settingsService = SettingsService();
+  await settingsService.initialize();
 
-  runApp(const EchoMapApp());
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+    ),
+  );
+
+  runApp(EchoMapApp(settingsService: settingsService));
 }
 
-class EchoMapApp extends StatelessWidget {
-  const EchoMapApp({super.key});
+class EchoMapApp extends StatefulWidget {
+  final SettingsService settingsService;
+
+  const EchoMapApp({super.key, required this.settingsService});
+
+  @override
+  State<EchoMapApp> createState() => _EchoMapAppState();
+}
+
+class _EchoMapAppState extends State<EchoMapApp> {
+  late SettingsData _currentSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSettings = widget.settingsService.currentSettings;
+
+    // Listen to settings changes
+    widget.settingsService.settingsStream.listen((settings) {
+      if (mounted) {
+        setState(() {
+          _currentSettings = settings;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider<NavigationBloc>(create: (context) => NavigationBloc()),
-        BlocProvider<LocationBloc>(create: (context) => LocationBloc()),
+        BlocProvider<LocationBloc>(
+          create: (context) => LocationBloc(),
+        ),
+        BlocProvider<NavigationBloc>(
+          create: (context) => NavigationBloc(),
+        ),
       ],
       child: MaterialApp(
         title: 'EchoMap',
-        theme: ThemeConfig.getLightTheme(),
-        darkTheme: ThemeConfig.getDarkTheme(),
-        themeMode: ThemeMode.system,
         debugShowCheckedModeBanner: false,
-        initialRoute: '/',
+        theme: _getTheme(ThemeMode.light),
+        darkTheme: _getTheme(ThemeMode.dark),
+        themeMode: _convertThemeMode(_currentSettings.themeMode),
+        home: const HomeScreen(),
         routes: {
-          '/': (context) => const HomeScreen(),
+          '/home': (context) => const HomeScreen(),
           '/map': (context) => const MapScreen(),
           '/settings': (context) => const SettingsScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
@@ -84,5 +122,32 @@ class EchoMapApp extends StatelessWidget {
         },
       ),
     );
+  }
+
+  ThemeMode _convertThemeMode(AppThemeMode appThemeMode) {
+    switch (appThemeMode) {
+      case AppThemeMode.light:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+        return ThemeMode.dark;
+      case AppThemeMode.system:
+        return ThemeMode.system;
+    }
+  }
+
+  ThemeData _getTheme(ThemeMode themeMode) {
+    final isDark = themeMode == ThemeMode.dark;
+
+    if (isDark) {
+      return ThemeConfig.getDarkTheme(
+        highContrast: _currentSettings.highContrastMode,
+        largeFontSize: _currentSettings.largeFontSize,
+      );
+    } else {
+      return ThemeConfig.getLightTheme(
+        highContrast: _currentSettings.highContrastMode,
+        largeFontSize: _currentSettings.largeFontSize,
+      );
+    }
   }
 }

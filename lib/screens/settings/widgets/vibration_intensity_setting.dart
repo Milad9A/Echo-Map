@@ -80,10 +80,13 @@ class VibrationIntensitySetting extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           initialIntensity == VibrationService.lowIntensity
-                          ? ThemeConfig.accentColor
-                          : null,
+                              ? ThemeConfig.accentColor
+                              : null,
                     ),
-                    child: const Text('Low'),
+                    child: const Text(
+                      'Low',
+                      style: TextStyle(fontSize: ThemeConfig.smallText),
+                    ),
                   ),
                 ),
                 const SizedBox(width: ThemeConfig.smallPadding),
@@ -95,10 +98,13 @@ class VibrationIntensitySetting extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           initialIntensity == VibrationService.mediumIntensity
-                          ? ThemeConfig.accentColor
-                          : null,
+                              ? ThemeConfig.accentColor
+                              : null,
                     ),
-                    child: const Text('Medium'),
+                    child: const Text(
+                      'Medium',
+                      style: TextStyle(fontSize: ThemeConfig.smallText),
+                    ),
                   ),
                 ),
                 const SizedBox(width: ThemeConfig.smallPadding),
@@ -110,10 +116,13 @@ class VibrationIntensitySetting extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           initialIntensity == VibrationService.highIntensity
-                          ? ThemeConfig.accentColor
-                          : null,
+                              ? ThemeConfig.accentColor
+                              : null,
                     ),
-                    child: const Text('High'),
+                    child: const Text(
+                      'High',
+                      style: TextStyle(fontSize: ThemeConfig.smallText),
+                    ),
                   ),
                 ),
               ],

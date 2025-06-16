@@ -85,8 +85,8 @@ class IntensityTestSection extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         currentIntensity == VibrationService.lowIntensity
-                        ? Colors.lightBlue
-                        : null,
+                            ? Colors.lightBlue
+                            : null,
                   ),
                   child: const Text('Low'),
                 ),
@@ -95,8 +95,8 @@ class IntensityTestSection extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         currentIntensity == VibrationService.mediumIntensity
-                        ? Colors.lightBlue
-                        : null,
+                            ? Colors.lightBlue
+                            : null,
                   ),
                   child: const Text('Medium'),
                 ),
@@ -105,8 +105,8 @@ class IntensityTestSection extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         currentIntensity == VibrationService.highIntensity
-                        ? Colors.lightBlue
-                        : null,
+                            ? Colors.lightBlue
+                            : null,
                   ),
                   child: const Text('High'),
                 ),
