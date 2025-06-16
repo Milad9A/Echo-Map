@@ -88,16 +88,16 @@ class NavigationActive extends NavigationState {
 
   @override
   List<Object> get props => [
-    destination,
-    currentPosition,
-    route,
-    isOnRoute,
-    lastUpdated,
-    if (nextStep != null) nextStep!,
-    if (distanceToNextStep != null) distanceToNextStep!,
-    if (distanceToDestination != null) distanceToDestination!,
-    if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
-  ];
+        destination,
+        currentPosition,
+        route,
+        isOnRoute,
+        lastUpdated,
+        if (nextStep != null) nextStep!,
+        if (distanceToNextStep != null) distanceToNextStep!,
+        if (distanceToDestination != null) distanceToDestination!,
+        if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
+      ];
 }
 
 /// Rerouting state - calculating a new route
@@ -116,11 +116,11 @@ class NavigationRerouting extends NavigationState {
 
   @override
   List<Object> get props => [
-    currentPosition,
-    destination,
-    deviationDistance,
-    startedAt,
-  ];
+        currentPosition,
+        destination,
+        deviationDistance,
+        startedAt,
+      ];
 }
 
 /// Arrived state - destination reached
@@ -141,12 +141,12 @@ class NavigationArrived extends NavigationState {
 
   @override
   List<Object> get props => [
-    destination,
-    finalPosition,
-    arrivedAt,
-    if (totalDistance != null) totalDistance!,
-    if (totalDuration != null) totalDuration!,
-  ];
+        destination,
+        finalPosition,
+        arrivedAt,
+        if (totalDistance != null) totalDistance!,
+        if (totalDuration != null) totalDuration!,
+      ];
 }
 
 /// Navigation error state
@@ -185,13 +185,13 @@ class NavigationEmergency extends NavigationState {
 
   @override
   List<Object> get props => [
-    emergencyType,
-    description,
-    occurredAt,
-    isResolvable,
-    if (currentPosition != null) currentPosition!,
-    if (actionRequired != null) actionRequired!,
-  ];
+        emergencyType,
+        description,
+        occurredAt,
+        isResolvable,
+        if (currentPosition != null) currentPosition!,
+        if (actionRequired != null) actionRequired!,
+      ];
 }
 
 /// Paused navigation state - navigation is temporarily stopped but can be resumed
@@ -240,12 +240,12 @@ class NavigationPaused extends NavigationState {
 
   @override
   List<Object> get props => [
-    destination,
-    currentPosition,
-    route,
-    pausedAt,
-    if (nextStep != null) nextStep!,
-    if (distanceToDestination != null) distanceToDestination!,
-    if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
-  ];
+        destination,
+        currentPosition,
+        route,
+        pausedAt,
+        if (nextStep != null) nextStep!,
+        if (distanceToDestination != null) distanceToDestination!,
+        if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
+      ];
 }

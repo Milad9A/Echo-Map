@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/waypoint.dart';
@@ -27,6 +30,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
   List<GeocodingResult> _searchResults = [];
   bool _isSearching = false;
   String? _errorMessage;
+  Timer? _searchDebounceTimer;
 
   // Recent places state
   List<RecentPlace> _recentPlaces = [];
@@ -44,6 +48,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _searchDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -87,6 +92,10 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
+
+    // Cancel previous search timer
+    _searchDebounceTimer?.cancel();
+
     if (query.isEmpty) {
       setState(() {
         _searchResults = [];
@@ -96,41 +105,100 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
       return;
     }
 
+    // Set loading state immediately for responsiveness
+    if (!_isSearching) {
+      setState(() {
+        _isSearching = true;
+        _errorMessage = null;
+      });
+    }
+
     // Debounce search requests
-    _performSearch(query);
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query);
+    });
   }
 
   Future<void> _performSearch(String query) async {
-    if (query.length < 3) {
-      return; // Wait for at least 3 characters
+    if (query.length < 2) {
+      setState(() {
+        _isSearching = false;
+        _searchResults = [];
+      });
+      return;
     }
 
-    setState(() {
-      _isSearching = true;
-      _errorMessage = null;
-    });
-
     try {
-      // Use location bias if available
+      // Use location bias if available for better local results
       final results = await _geocodingService.searchPlaces(
         query,
         bias: widget.initialLocation,
       );
 
-      if (mounted) {
+      // Add distance information to results if we have user location
+      final resultsWithDistance = <GeocodingResult>[];
+      if (widget.initialLocation != null) {
+        for (final result in results) {
+          final distance =
+              _calculateDistance(widget.initialLocation!, result.coordinates);
+          resultsWithDistance.add(result.copyWithDistance(distance));
+        }
+      } else {
+        resultsWithDistance.addAll(results);
+      }
+
+      if (mounted && _searchController.text.trim() == query) {
         setState(() {
-          _searchResults = results;
+          _searchResults = resultsWithDistance;
           _isSearching = false;
+          _errorMessage = resultsWithDistance.isEmpty
+              ? 'No results found for "$query" nearby'
+              : null;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _searchController.text.trim() == query) {
         setState(() {
           _searchResults = [];
           _isSearching = false;
-          _errorMessage = e.toString();
+          _errorMessage = _getErrorMessage(e.toString());
         });
       }
+    }
+  }
+
+  // Calculate distance between two points
+  double _calculateDistance(LatLng point1, LatLng point2) {
+    const double earthRadius = 6371000; // Earth's radius in meters
+
+    final double lat1Rad = point1.latitude * (3.141592653589793 / 180);
+    final double lat2Rad = point2.latitude * (3.141592653589793 / 180);
+    final double deltaLatRad =
+        (point2.latitude - point1.latitude) * (3.141592653589793 / 180);
+    final double deltaLngRad =
+        (point2.longitude - point1.longitude) * (3.141592653589793 / 180);
+
+    final double a = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
+        cos(lat1Rad) *
+            cos(lat2Rad) *
+            sin(deltaLngRad / 2) *
+            sin(deltaLngRad / 2);
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return earthRadius * c;
+  }
+
+  String _getErrorMessage(String error) {
+    if (error.contains('timeout')) {
+      return 'Search timed out. Please check your connection and try again.';
+    } else if (error.contains('connection')) {
+      return 'Connection error. Please check your internet connection.';
+    } else if (error.contains('quota') || error.contains('limit')) {
+      return 'Search limit reached. Please try again later.';
+    } else if (error.contains('API key')) {
+      return 'Search service configuration error.';
+    } else {
+      return 'Search failed. Please try again.';
     }
   }
 
@@ -275,8 +343,19 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search for a destination',
-                prefixIcon: const Icon(Icons.search),
+                hintText: widget.initialLocation != null
+                    ? 'Search nearby (e.g., "McDonald\'s", "Hauptbahnhof")'
+                    : 'Search for a destination (e.g., "McDonald\'s Berlin")',
+                prefixIcon: _isSearching
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -288,6 +367,10 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12.0),
                 ),
+                helperText: widget.initialLocation != null
+                    ? 'Results are sorted by distance from your location'
+                    : 'Try searching for addresses, landmarks, or business names',
+                helperMaxLines: 2,
               ),
               autofocus: true,
               textInputAction: TextInputAction.search,
@@ -300,34 +383,45 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Card(
-                color: Colors.red.shade50,
+                color: _searchResults.isEmpty
+                    ? Colors.orange.shade50
+                    : Colors.red.shade50,
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
                     children: [
-                      Icon(Icons.error, color: Colors.red.shade700),
+                      Icon(
+                        _searchResults.isEmpty ? Icons.info : Icons.error,
+                        color: _searchResults.isEmpty
+                            ? Colors.orange.shade700
+                            : Colors.red.shade700,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Search error: $_errorMessage',
-                          style: TextStyle(color: Colors.red.shade700),
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: _searchResults.isEmpty
+                                ? Colors.orange.shade700
+                                : Colors.red.shade700,
+                          ),
                         ),
                       ),
+                      if (_searchResults.isEmpty &&
+                          !_errorMessage!.contains('No results'))
+                        TextButton(
+                          onPressed: () =>
+                              _performSearch(_searchController.text.trim()),
+                          child: const Text('Retry'),
+                        ),
                     ],
                   ),
                 ),
               ),
             ),
 
-          // Loading indicator
-          if (_isSearching)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: CircularProgressIndicator()),
-            )
-
           // Search results
-          else if (_searchResults.isNotEmpty)
+          if (_searchResults.isNotEmpty)
             Expanded(
               child: ListView.builder(
                 itemCount: _searchResults.length,
@@ -340,33 +434,58 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                           : result.isSpecificAddress
                               ? Icons.home
                               : Icons.location_on,
+                      color: result.isSpecificAddress ? Colors.blue : null,
                     ),
-                    title: Text(result.displayName),
+                    title: Text(
+                      result.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(result.shortDescription),
+                        if (result.distanceFromUser != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            result.distanceText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                         if (result.confidence != null)
                           Text(
                             'Confidence: ${(result.confidence! * 100).round()}%',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey[600],
                             ),
                           ),
                       ],
                     ),
                     onTap: () => _selectGeocodingResult(result),
-                    trailing: result.isSpecificAddress
-                        ? const Icon(Icons.my_location, size: 16)
-                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (result.distanceFromUser != null &&
+                            result.distanceFromUser! < 500)
+                          Icon(Icons.near_me,
+                              size: 16, color: Colors.green[700]),
+                        if (result.isSpecificAddress)
+                          const Icon(Icons.my_location,
+                              size: 16, color: Colors.blue),
+                        const Icon(Icons.arrow_forward_ios, size: 16),
+                      ],
+                    ),
                   );
                 },
               ),
             )
 
-          // Recent and favorite places (when no search)
-          else
+          // Recent and favorite places (when no search or search is empty)
+          else if (_searchController.text.trim().isEmpty)
             Expanded(
               child: _isLoadingPlaces
                   ? const Center(child: CircularProgressIndicator())
@@ -394,6 +513,26 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                         ],
                       ),
                     ),
+            )
+
+          // Empty state when searching but no results
+          else if (!_isSearching &&
+              _searchResults.isEmpty &&
+              _errorMessage == null)
+            const Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.search, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Start typing to search for places',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),

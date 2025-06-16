@@ -20,64 +20,56 @@ class PatternTestSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Test Vibration Patterns',
+              'Test Navigation Patterns',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Each pattern has a unique vibration to help you distinguish different navigation events:',
-              style: TextStyle(fontSize: 14),
+
+            // Navigation patterns
+            _buildPatternButton(
+              'On Route',
+              'Gentle feedback when staying on course',
+              () => vibrationService.onRouteFeedback(intensity: intensity),
             ),
-            const SizedBox(height: 16),
-
-            // Grid of pattern test buttons
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 3,
-              children: VibrationService.patterns.keys.map((patternName) {
-                return ElevatedButton(
-                  onPressed: () {
-                    vibrationService.playPattern(patternName,
-                        intensity: intensity);
-                  },
-                  child: Text(
-                    _getPatternDisplayName(patternName),
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                );
-              }).toList(),
+            _buildPatternButton(
+              'Approaching Turn',
+              'Alert when a turn is coming up',
+              () => vibrationService.approachingTurnFeedback(
+                  intensity: intensity),
             ),
-
-            const SizedBox(height: 16),
-
-            // Description of patterns
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                _buildPatternDescription(
-                    'onRoute', 'Light pulse when walking correctly'),
-                _buildPatternDescription(
-                    'approachingTurn', 'Double pulse before turns'),
-                _buildPatternDescription('leftTurn', 'Pattern for left turns'),
-                _buildPatternDescription(
-                    'rightTurn', 'Pattern for right turns'),
-                _buildPatternDescription(
-                    'wrongDirection', 'Strong pulse when off-route'),
-                _buildPatternDescription(
-                    'destinationReached', 'Triple pulse at destination'),
-                _buildPatternDescription(
-                    'crossingStreet', 'Warning for street crossings'),
-                _buildPatternDescription(
-                    'hazardWarning', 'Alert for nearby hazards'),
-              ],
+            _buildPatternButton(
+              'Left Turn',
+              'Pattern for left turn instruction',
+              () => vibrationService.leftTurnFeedback(intensity: intensity),
+            ),
+            _buildPatternButton(
+              'Right Turn',
+              'Pattern for right turn instruction',
+              () => vibrationService.rightTurnFeedback(intensity: intensity),
+            ),
+            _buildPatternButton(
+              'Wrong Direction',
+              'Strong alert when going off route',
+              () =>
+                  vibrationService.wrongDirectionFeedback(intensity: intensity),
+            ),
+            _buildPatternButton(
+              'Destination Reached',
+              'Celebration pattern when arriving',
+              () => vibrationService.destinationReachedFeedback(
+                  intensity: intensity),
+            ),
+            _buildPatternButton(
+              'Street Crossing',
+              'Warning when approaching a street crossing',
+              () =>
+                  vibrationService.crossingStreetFeedback(intensity: intensity),
+            ),
+            _buildPatternButton(
+              'Hazard Warning',
+              'Alert for obstacles or hazards',
+              () =>
+                  vibrationService.hazardWarningFeedback(intensity: intensity),
             ),
           ],
         ),
@@ -85,54 +77,38 @@ class PatternTestSection extends StatelessWidget {
     );
   }
 
-  String _getPatternDisplayName(String patternName) {
-    switch (patternName) {
-      case 'onRoute':
-        return 'On Route';
-      case 'approachingTurn':
-        return 'Approaching Turn';
-      case 'leftTurn':
-        return 'Left Turn';
-      case 'rightTurn':
-        return 'Right Turn';
-      case 'wrongDirection':
-        return 'Wrong Direction';
-      case 'destinationReached':
-        return 'Destination Reached';
-      case 'crossingStreet':
-        return 'Street Crossing';
-      case 'hazardWarning':
-        return 'Hazard Warning';
-      default:
-        return patternName;
-    }
-  }
-
-  Widget _buildPatternDescription(String pattern, String description) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            _getPatternDisplayName(pattern),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
+  Widget _buildPatternButton(
+      String title, String description, VoidCallback onPressed) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              description,
-              style: const TextStyle(fontSize: 10),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -186,4 +186,69 @@ class VibrationPatternTester {
   void cancelTest() {
     _vibrationService.stopVibration();
   }
+
+  // Test navigation sequence simulation
+  Future<void> testNavigationSequence() async {
+    debugPrint('Testing navigation sequence...');
+
+    // Simulate navigation start
+    await _vibrationService.onRouteFeedback();
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Simulate approaching turn
+    await _vibrationService.approachingTurnFeedback();
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Simulate left turn
+    await _vibrationService.leftTurnFeedback();
+    await Future.delayed(const Duration(seconds: 3));
+
+    // Back on route
+    await _vibrationService.onRouteFeedback();
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Simulate destination reached
+    await _vibrationService.destinationReachedFeedback();
+
+    debugPrint('Navigation sequence test completed');
+  }
+
+  // Test error conditions
+  Future<void> testErrorPatterns() async {
+    debugPrint('Testing error patterns...');
+
+    // Wrong direction
+    await _vibrationService.wrongDirectionFeedback();
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Hazard warning
+    await _vibrationService.hazardWarningFeedback();
+    await Future.delayed(const Duration(seconds: 2));
+
+    debugPrint('Error pattern testing completed');
+  }
+
+  // Test intensity levels for a specific pattern
+  Future<void> testIntensityLevels(String pattern) async {
+    debugPrint('Testing intensity levels for: $pattern');
+
+    // Low intensity
+    debugPrint('Low intensity');
+    await _vibrationService.playPattern(pattern,
+        intensity: VibrationService.lowIntensity);
+    await Future.delayed(const Duration(seconds: 1));
+
+    // Medium intensity
+    debugPrint('Medium intensity');
+    await _vibrationService.playPattern(pattern,
+        intensity: VibrationService.mediumIntensity);
+    await Future.delayed(const Duration(seconds: 1));
+
+    // High intensity
+    debugPrint('High intensity');
+    await _vibrationService.playPattern(pattern,
+        intensity: VibrationService.highIntensity);
+
+    debugPrint('Intensity testing completed');
+  }
 }

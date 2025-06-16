@@ -26,6 +26,7 @@ class GeocodingResult extends Equatable {
   final List<LocationType> types;
   final Map<String, String> addressComponents;
   final double? confidence; // 0.0 to 1.0
+  final double? distanceFromUser; // Distance in meters from user's location
 
   const GeocodingResult({
     required this.formattedAddress,
@@ -35,6 +36,7 @@ class GeocodingResult extends Equatable {
     this.types = const [],
     this.addressComponents = const {},
     this.confidence,
+    this.distanceFromUser,
   });
 
   // Create from Google Maps Geocoding API response
@@ -144,6 +146,32 @@ class GeocodingResult extends Equatable {
     }
   }
 
+  // Create a copy with distance information
+  GeocodingResult copyWithDistance(double distance) {
+    return GeocodingResult(
+      formattedAddress: formattedAddress,
+      coordinates: coordinates,
+      name: name,
+      placeId: placeId,
+      types: types,
+      addressComponents: addressComponents,
+      confidence: confidence,
+      distanceFromUser: distance,
+    );
+  }
+
+  // Get human-readable distance
+  String get distanceText {
+    if (distanceFromUser == null) return '';
+
+    if (distanceFromUser! < 1000) {
+      return '${distanceFromUser!.round()}m away';
+    } else {
+      final km = distanceFromUser! / 1000.0;
+      return '${km.toStringAsFixed(1)}km away';
+    }
+  }
+
   // Get display name for the result
   String get displayName {
     if (name != null && name!.isNotEmpty) {
@@ -199,6 +227,7 @@ class GeocodingResult extends Equatable {
         types,
         addressComponents,
         confidence,
+        distanceFromUser,
       ];
 
   @override

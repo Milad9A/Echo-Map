@@ -6,6 +6,7 @@ import '../models/route_information.dart';
 import '../models/street_crossing.dart';
 import '../models/hazard.dart';
 import '../services/emergency_service.dart';
+import '../services/vibration_service.dart';
 
 enum NavigationStatus {
   idle,
@@ -66,6 +67,9 @@ class NavigationMonitoringService {
   // Services (these would be injected in a real implementation)
   StreamSubscription<Position>? _locationSubscription;
 
+  // Add vibration service
+  final VibrationService _vibrationService = VibrationService();
+
   // Getters
   NavigationStatus get status => _status;
   RouteInformation? get currentRoute => _currentRoute;
@@ -122,11 +126,33 @@ class NavigationMonitoringService {
     // Check route deviation
     _checkRouteDeviation(newPosition);
 
+    // Check for upcoming turns
+    _checkForUpcomingTurns(newPosition);
+
     // Check if destination reached
     _checkDestinationReached(newPosition);
 
     // Update distance and time estimates
     _updateEstimates(newPosition);
+
+    // Provide regular "on route" feedback
+    _provideRegularFeedback();
+  }
+
+  // Add regular feedback to keep user informed they're on track
+  DateTime? _lastOnRouteFeedback;
+  void _provideRegularFeedback() {
+    final now = DateTime.now();
+
+    // Only provide feedback if we're on route
+    if (!_isOnRoute) return;
+
+    // Provide feedback every 30 seconds
+    if (_lastOnRouteFeedback == null ||
+        now.difference(_lastOnRouteFeedback!).inSeconds >= 30) {
+      _lastOnRouteFeedback = now;
+      _vibrationService.onRouteFeedback();
+    }
   }
 
   // Check if user has deviated from route
@@ -143,6 +169,11 @@ class NavigationMonitoringService {
     if (wasOnRoute != _isOnRoute) {
       if (!_isOnRoute) {
         _deviationController.add(deviation);
+        // Provide immediate vibration feedback for going off route
+        _vibrationService.wrongDirectionFeedback();
+      } else {
+        // Back on route - provide positive feedback
+        _vibrationService.onRouteFeedback();
       }
     }
 
@@ -157,6 +188,28 @@ class NavigationMonitoringService {
     // This is a simplified implementation
     // In a real app, you'd calculate the distance to the route polyline
     return 0.0;
+  }
+
+  // Update distance and time estimates
+  void _updateEstimates(LatLng position) {
+    if (_currentRoute == null) return;
+
+    // Calculate distance to destination
+    _distanceToDestination = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      _currentRoute!.destination.position.latitude,
+      _currentRoute!.destination.position.longitude,
+    ).round();
+
+    // Estimate time remaining (simplified calculation)
+    // Assuming average speed of 5 km/h for walking
+    const averageSpeed = 5.0; // km/h
+    if (_distanceToDestination != null) {
+      final distanceInKm = _distanceToDestination! / 1000.0;
+      _estimatedTimeRemaining =
+          (distanceInKm / averageSpeed * 3600).round(); // in seconds
+    }
   }
 
   // Check if destination is reached
@@ -174,26 +227,43 @@ class NavigationMonitoringService {
       _status = NavigationStatus.arrived;
       _statusController.add(_status);
       _destinationReachedController.add(position);
+
+      // Provide destination reached feedback
+      _vibrationService.destinationReachedFeedback();
     }
   }
 
-  // Update distance and time estimates
-  void _updateEstimates(LatLng position) {
-    if (_currentRoute == null) return;
+  // Add method to handle approaching turns
+  void _checkForUpcomingTurns(LatLng position) {
+    if (_currentRoute == null || !_currentRoute!.hasSteps) return;
 
-    // Calculate remaining distance (simplified)
-    _distanceToDestination = Geolocator.distanceBetween(
-      position.latitude,
-      position.longitude,
-      _currentRoute!.destination.position.latitude,
-      _currentRoute!.destination.position.longitude,
-    ).round();
+    // Find the next turn in the route
+    for (final step in _currentRoute!.steps) {
+      if (step.isTurn) {
+        final distanceToTurn = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          step.startLocation.latitude,
+          step.startLocation.longitude,
+        );
 
-    // Estimate remaining time (basic calculation)
-    if (_distanceToDestination != null) {
-      const averageWalkingSpeed = 1.4; // m/s (about 5 km/h)
-      _estimatedTimeRemaining =
-          (_distanceToDestination! / averageWalkingSpeed).round();
+        // If approaching a turn (within 50 meters)
+        if (distanceToTurn <= 50 && distanceToTurn > 20) {
+          _upcomingTurnController.add(step);
+          _vibrationService.approachingTurnFeedback();
+          break;
+        }
+        // If very close to turn (within 20 meters)
+        else if (distanceToTurn <= 20) {
+          // Provide specific turn direction feedback
+          if (step.maneuver.contains('left')) {
+            _vibrationService.leftTurnFeedback();
+          } else if (step.maneuver.contains('right')) {
+            _vibrationService.rightTurnFeedback();
+          }
+          break;
+        }
+      }
     }
   }
 

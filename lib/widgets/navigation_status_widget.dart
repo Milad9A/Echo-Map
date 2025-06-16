@@ -99,14 +99,14 @@ class NavigationStatusWidget extends StatelessWidget {
             Icon(
               state.isOnRoute ? Icons.navigation : Icons.warning,
               color: state.isOnRoute ? ThemeConfig.accentColor : Colors.orange,
-              size: 24,
+              size: isCompact ? 20 : 24,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 state.isOnRoute ? 'Navigating' : 'Off Route',
                 style: TextStyle(
-                  fontSize: isCompact ? 16 : 18,
+                  fontSize: isCompact ? 14 : 18,
                   fontWeight: FontWeight.bold,
                   color:
                       state.isOnRoute ? ThemeConfig.accentColor : Colors.orange,
@@ -114,25 +114,160 @@ class NavigationStatusWidget extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Add compact view indicator
+            if (isCompact)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'COMPACT',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
 
-        // Destination
+        // Destination - always show but adjust size
         Text(
           'To: ${state.destination}',
-          style: const TextStyle(
-            fontSize: 14,
+          style: TextStyle(
+            fontSize: isCompact ? 12 : 14,
             fontWeight: FontWeight.w500,
           ),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
 
-        if (!isCompact) ...[
+        if (isCompact) ...[
+          // COMPACT VIEW - Show only essential info in one line
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Distance and time in compact format
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      state.distanceText,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      state.timeText,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              // Next turn in compact format
+              if (state.nextStep != null) ...[
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _getTurnIcon(state.nextStep!.turnDirection),
+                      size: 16,
+                      color: ThemeConfig.accentColor,
+                    ),
+                    const SizedBox(width: 4),
+                    if (state.distanceToNextStep != null)
+                      Text(
+                        _formatDistance(state.distanceToNextStep!),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: ThemeConfig.accentColor,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ] else ...[
+          // DETAILED VIEW - Show full information with better layout
+          // Next Step - Make this more prominent
+          if (state.nextStep != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: ThemeConfig.accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: ThemeConfig.accentColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _getTurnIcon(state.nextStep!.turnDirection),
+                        size: 24,
+                        color: ThemeConfig.accentColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _getTurnText(state.nextStep!.turnDirection),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: ThemeConfig.accentColor,
+                          ),
+                        ),
+                      ),
+                      if (state.distanceToNextStep != null) ...[
+                        Text(
+                          'in ${_formatDistance(state.distanceToNextStep!)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                ThemeConfig.accentColor.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (state.nextStep!.friendlyInstruction.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      state.nextStep!.friendlyInstruction,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 8),
 
-          // Distance and Time Row
+          // Distance and Time Row - Detailed view
           Row(
             children: [
               Expanded(
@@ -153,40 +288,7 @@ class NavigationStatusWidget extends StatelessWidget {
             ],
           ),
 
-          // Next Step
-          if (state.nextStep != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: ThemeConfig.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _getTurnIcon(state.nextStep!.turnDirection),
-                    size: 20,
-                    color: ThemeConfig.accentColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      state.nextStep!.instruction,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // Controls
+          // Controls - only in detailed view
           if (showControls) ...[
             const SizedBox(height: 12),
             _buildControlButtons(context),
@@ -206,20 +308,37 @@ class NavigationStatusWidget extends StatelessWidget {
             Icon(
               Icons.pause_circle,
               color: Colors.orange,
-              size: 24,
+              size: isCompact ? 20 : 24,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Navigation Paused',
                 style: TextStyle(
-                  fontSize: isCompact ? 16 : 18,
+                  fontSize: isCompact ? 14 : 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.orange,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Add compact view indicator
+            if (isCompact)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'COMPACT',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -227,15 +346,60 @@ class NavigationStatusWidget extends StatelessWidget {
         // Destination
         Text(
           'To: ${state.destination}',
-          style: const TextStyle(
-            fontSize: 14,
+          style: TextStyle(
+            fontSize: isCompact ? 12 : 14,
             fontWeight: FontWeight.w500,
           ),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
 
-        if (!isCompact) ...[
+        if (isCompact) ...[
+          // COMPACT VIEW for paused state
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      state.distanceText,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      state.timeText,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  context.read<NavigationBloc>().add(ResumeNavigation());
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ThemeConfig.accentColor,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  minimumSize: Size.zero,
+                ),
+                child: const Text(
+                  'Resume',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          // DETAILED VIEW for paused state
           const SizedBox(height: 8),
 
           // Distance and Time Row
@@ -664,12 +828,60 @@ class NavigationStatusWidget extends StatelessWidget {
         return Icons.turn_left;
       case 'right':
         return Icons.turn_right;
+      case 'slight_left':
+        return Icons.turn_slight_left;
+      case 'slight_right':
+        return Icons.turn_slight_right;
+      case 'sharp_left':
+        return Icons.turn_sharp_left;
+      case 'sharp_right':
+        return Icons.turn_sharp_right;
       case 'uturn':
         return Icons.u_turn_left;
       case 'straight':
         return Icons.straight;
+      case 'merge':
+        return Icons.merge;
+      case 'exit':
+        return Icons.exit_to_app;
       default:
         return Icons.navigation;
+    }
+  }
+
+  String _getTurnText(String turnDirection) {
+    switch (turnDirection.toLowerCase()) {
+      case 'left':
+        return 'Turn left';
+      case 'right':
+        return 'Turn right';
+      case 'slight_left':
+        return 'Slight left';
+      case 'slight_right':
+        return 'Slight right';
+      case 'sharp_left':
+        return 'Sharp left';
+      case 'sharp_right':
+        return 'Sharp right';
+      case 'uturn':
+        return 'Make U-turn';
+      case 'straight':
+        return 'Continue straight';
+      case 'merge':
+        return 'Merge';
+      case 'exit':
+        return 'Take exit';
+      default:
+        return 'Continue';
+    }
+  }
+
+  String _formatDistance(int distanceMeters) {
+    if (distanceMeters < 1000) {
+      return '${distanceMeters}m';
+    } else {
+      final km = distanceMeters / 1000.0;
+      return '${km.toStringAsFixed(1)}km';
     }
   }
 }

@@ -33,19 +33,55 @@ class RouteStep extends Equatable {
     this.streetName,
   });
 
-  // Get turn direction from maneuver
+  // Add getter for better turn direction parsing
   String get turnDirection {
-    if (maneuver.contains('left')) return 'left';
-    if (maneuver.contains('right')) return 'right';
-    if (maneuver.contains('uturn') || maneuver.contains('u-turn')) {
+    final lowerManeuver = maneuver.toLowerCase();
+
+    if (lowerManeuver.contains('left')) {
+      if (lowerManeuver.contains('slight')) return 'slight_left';
+      if (lowerManeuver.contains('sharp')) return 'sharp_left';
+      return 'left';
+    } else if (lowerManeuver.contains('right')) {
+      if (lowerManeuver.contains('slight')) return 'slight_right';
+      if (lowerManeuver.contains('sharp')) return 'sharp_right';
+      return 'right';
+    } else if (lowerManeuver.contains('uturn') ||
+        lowerManeuver.contains('u-turn')) {
       return 'uturn';
+    } else if (lowerManeuver.contains('straight') ||
+        lowerManeuver.contains('continue')) {
+      return 'straight';
+    } else if (lowerManeuver.contains('merge')) {
+      return 'merge';
+    } else if (lowerManeuver.contains('exit') ||
+        lowerManeuver.contains('ramp')) {
+      return 'exit';
     }
-    return 'straight';
+
+    return 'straight'; // default
   }
 
-  // Check if this step represents a turn
+  // Add getter for user-friendly instruction
+  String get friendlyInstruction {
+    String cleaned = instruction;
+
+    // Remove common HTML artifacts that might remain
+    cleaned = cleaned.replaceAll(RegExp(r'<[^>]*>'), '');
+    cleaned = cleaned.replaceAll('&nbsp;', ' ');
+    cleaned = cleaned.trim();
+
+    // Simplify common phrases
+    cleaned = cleaned.replaceAll('Continue onto', 'Continue on');
+    cleaned = cleaned.replaceAll('Proceed to', 'Go to');
+    cleaned = cleaned.replaceAll('Head', 'Go');
+
+    return cleaned;
+  }
+
+  // Add getter to check if this is a significant turn
   bool get isTurn {
-    return turnDirection != 'straight' && type == RouteStepType.turn;
+    final direction = turnDirection;
+    return direction != 'straight' && direction != 'merge';
   }
 
   // Get human-readable distance

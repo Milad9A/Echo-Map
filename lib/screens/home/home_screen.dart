@@ -26,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   bool _isListening = false;
   bool _vibrationAvailable = false;
+  bool _isCompactView = false; // Add this state variable
   late AnimationController _welcomeAnimationController;
   late Animation<double> _fadeInAnimation;
   late Animation<Offset> _slideAnimation;
@@ -250,6 +251,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Improved compact view toggle with better tooltip and icon
+          IconButton(
+            icon: Icon(_isCompactView ? Icons.unfold_more : Icons.unfold_less),
+            tooltip: _isCompactView
+                ? 'Switch to detailed navigation view'
+                : 'Switch to compact navigation view',
+            onPressed: () {
+              setState(() {
+                _isCompactView = !_isCompactView;
+              });
+
+              // Provide feedback about the change
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(_isCompactView
+                      ? 'Switched to compact view - navigation info is summarized'
+                      : 'Switched to detailed view - navigation info shows more details'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: Icon(_isListening ? Icons.mic : Icons.mic_none),
             tooltip: 'Voice commands',
@@ -277,14 +300,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 position: _slideAnimation,
                 child: Column(
                   children: [
-                    // Navigation status widget remains unchanged
+                    // Add a header to explain what compact view does
+                    if (_isCompactView)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8.0),
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 8.0),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8.0),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.unfold_less,
+                                color: Colors.blue.shade700, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Compact View: Navigation info is summarized',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Navigation status widget with proper compact setting
                     BlocBuilder<NavigationBloc, NavigationState>(
                       builder: (context, navigationState) {
                         return NavigationStatusWidget(
-                          isCompact: navigationState is NavigationActive ||
-                                  navigationState is NavigationPaused
-                              ? false
-                              : true,
+                          isCompact: _isCompactView,
                           showControls: navigationState is NavigationActive ||
                               navigationState is NavigationPaused,
                           onTap: () {
@@ -510,6 +561,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Color _getLocationStatusColor(LocationState state) {
+    if (state is LocationTracking) return ThemeConfig.accentColor;
+    if (state is LocationReady) return ThemeConfig.primaryColor;
+    if (state is LocationPermissionDenied) return Colors.orange;
     if (state is LocationTracking) return ThemeConfig.accentColor;
     if (state is LocationReady) return ThemeConfig.primaryColor;
     if (state is LocationPermissionDenied) return Colors.orange;

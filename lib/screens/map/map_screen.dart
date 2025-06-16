@@ -235,7 +235,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               left: 0,
               right: 0,
               child: NavigationStatusWidget(
-                isCompact: false, // Use full view on map screen
+                isCompact: false, // Always use detailed view on map screen
                 showControls: true,
                 onTap: () {
                   // Optional: expand/collapse functionality or show navigation details

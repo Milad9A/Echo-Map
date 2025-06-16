@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:equatable/equatable.dart';
 
 class SettingsService {
   static final SettingsService _instance = SettingsService._internal();
@@ -18,6 +19,7 @@ class SettingsService {
   static const String _keyVibrationIntensity = 'vibration_intensity';
   static const String _keySpeakInstructions = 'speak_instructions';
   static const String _keyEnableVoiceCommands = 'enable_voice_commands';
+  static const String _keyCompactNavigationView = 'compact_navigation_view';
 
   // Default values
   static const bool _defaultHighContrastMode = false;
@@ -26,6 +28,7 @@ class SettingsService {
   static const int _defaultVibrationIntensity = 128; // medium intensity
   static const bool _defaultSpeakInstructions = true;
   static const bool _defaultEnableVoiceCommands = true;
+  static const bool _defaultCompactNavigationView = false;
 
   // Current settings
   SettingsData _currentSettings = const SettingsData();
@@ -62,6 +65,8 @@ class SettingsService {
             _prefs?.getBool(_keySpeakInstructions) ?? _defaultSpeakInstructions,
         enableVoiceCommands: _prefs?.getBool(_keyEnableVoiceCommands) ??
             _defaultEnableVoiceCommands,
+        compactNavigationView: _prefs?.getBool(_keyCompactNavigationView) ??
+            _defaultCompactNavigationView,
       );
 
       _settingsController.add(_currentSettings);
@@ -143,6 +148,19 @@ class SettingsService {
     }
   }
 
+  // Update compact navigation view
+  Future<void> setCompactNavigationView(bool value) async {
+    try {
+      await _prefs?.setBool(_keyCompactNavigationView, value);
+      _currentSettings =
+          _currentSettings.copyWith(compactNavigationView: value);
+      _settingsController.add(_currentSettings);
+      debugPrint('Compact navigation view updated: $value');
+    } catch (e) {
+      debugPrint('Error saving compact navigation view: $e');
+    }
+  }
+
   // Reset all settings to defaults
   Future<void> resetToDefaults() async {
     try {
@@ -161,13 +179,14 @@ class SettingsService {
 }
 
 // Settings data class
-class SettingsData {
+class SettingsData extends Equatable {
   final bool highContrastMode;
   final bool largeFontSize;
   final bool reduceMotion;
   final int vibrationIntensity;
   final bool speakInstructions;
   final bool enableVoiceCommands;
+  final bool compactNavigationView;
 
   const SettingsData({
     this.highContrastMode = false,
@@ -176,6 +195,7 @@ class SettingsData {
     this.vibrationIntensity = 128,
     this.speakInstructions = true,
     this.enableVoiceCommands = true,
+    this.compactNavigationView = false,
   });
 
   SettingsData copyWith({
@@ -185,6 +205,7 @@ class SettingsData {
     int? vibrationIntensity,
     bool? speakInstructions,
     bool? enableVoiceCommands,
+    bool? compactNavigationView,
   }) {
     return SettingsData(
       highContrastMode: highContrastMode ?? this.highContrastMode,
@@ -193,13 +214,27 @@ class SettingsData {
       vibrationIntensity: vibrationIntensity ?? this.vibrationIntensity,
       speakInstructions: speakInstructions ?? this.speakInstructions,
       enableVoiceCommands: enableVoiceCommands ?? this.enableVoiceCommands,
+      compactNavigationView:
+          compactNavigationView ?? this.compactNavigationView,
     );
   }
+
+  @override
+  List<Object> get props => [
+        highContrastMode,
+        largeFontSize,
+        reduceMotion,
+        vibrationIntensity,
+        speakInstructions,
+        enableVoiceCommands,
+        compactNavigationView,
+      ];
 
   @override
   String toString() {
     return 'SettingsData{highContrastMode: $highContrastMode, largeFontSize: $largeFontSize, '
         'reduceMotion: $reduceMotion, vibrationIntensity: $vibrationIntensity, '
-        'speakInstructions: $speakInstructions, enableVoiceCommands: $enableVoiceCommands}';
+        'speakInstructions: $speakInstructions, enableVoiceCommands: $enableVoiceCommands, '
+        'compactNavigationView: $compactNavigationView}';
   }
 }
