@@ -10,6 +10,7 @@ import '../services/emergency_service.dart';
 enum NavigationStatus {
   idle,
   active,
+  paused, // Add paused status
   rerouting,
   arrived,
   error,
@@ -56,6 +57,7 @@ class NavigationMonitoringService {
   int? _distanceToDestination;
   int? _estimatedTimeRemaining;
   RouteStep? _nextStep;
+  bool _isPaused = false; // Add pause state tracking
 
   // Configuration
   double _routeDeviationThreshold = 50.0;
@@ -211,6 +213,38 @@ class NavigationMonitoringService {
     });
   }
 
+  // Pause navigation
+  Future<void> pauseNavigation() async {
+    if (_status != NavigationStatus.active) return;
+
+    _isPaused = true;
+    _status = NavigationStatus.paused;
+    _statusController.add(_status);
+
+    // Pause location updates but keep the route data
+    await _locationSubscription?.cancel();
+    _locationSubscription = null;
+
+    debugPrint('Navigation paused');
+  }
+
+  // Resume navigation
+  Future<void> resumeNavigation() async {
+    if (_status != NavigationStatus.paused || _currentRoute == null) return;
+
+    _isPaused = false;
+    _status = NavigationStatus.active;
+    _statusController.add(_status);
+
+    // Resume location tracking
+    await _startLocationTracking();
+
+    debugPrint('Navigation resumed');
+  }
+
+  // Check if navigation is paused
+  bool get isPaused => _isPaused;
+
   // Stop navigation
   Future<void> stopNavigation() async {
     await _locationSubscription?.cancel();
@@ -222,6 +256,7 @@ class NavigationMonitoringService {
     _isOnRoute = true;
     _distanceToDestination = null;
     _estimatedTimeRemaining = null;
+    _isPaused = false; // Reset pause state
 
     _status = NavigationStatus.idle;
     _statusController.add(_status);

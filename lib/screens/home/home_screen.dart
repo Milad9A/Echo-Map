@@ -281,10 +281,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     BlocBuilder<NavigationBloc, NavigationState>(
                       builder: (context, navigationState) {
                         return NavigationStatusWidget(
-                          isCompact: navigationState is NavigationActive
+                          isCompact: navigationState is NavigationActive ||
+                                  navigationState is NavigationPaused
                               ? false
                               : true,
-                          showControls: navigationState is NavigationActive,
+                          showControls: navigationState is NavigationActive ||
+                              navigationState is NavigationPaused,
                           onTap: () {
                             if (navigationState is NavigationIdle ||
                                 navigationState is NavigationError) {

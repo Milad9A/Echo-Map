@@ -193,3 +193,59 @@ class NavigationEmergency extends NavigationState {
     if (actionRequired != null) actionRequired!,
   ];
 }
+
+/// Paused navigation state - navigation is temporarily stopped but can be resumed
+class NavigationPaused extends NavigationState {
+  final String destination;
+  final LatLng currentPosition;
+  final RouteInformation route;
+  final RouteStep? nextStep;
+  final int? distanceToDestination;
+  final int? estimatedTimeInSeconds;
+  final DateTime pausedAt;
+
+  NavigationPaused({
+    required this.destination,
+    required this.currentPosition,
+    required this.route,
+    this.nextStep,
+    this.distanceToDestination,
+    this.estimatedTimeInSeconds,
+    DateTime? pausedAt,
+  }) : pausedAt = pausedAt ?? DateTime.now();
+
+  String get distanceText {
+    if (distanceToDestination == null) return 'Unknown';
+
+    if (distanceToDestination! < 1000) {
+      return '$distanceToDestination m';
+    } else {
+      final km = distanceToDestination! / 1000.0;
+      return '${km.toStringAsFixed(1)} km';
+    }
+  }
+
+  String get timeText {
+    if (estimatedTimeInSeconds == null) return 'Unknown';
+
+    final minutes = (estimatedTimeInSeconds! / 60).round();
+    if (minutes < 60) {
+      return '$minutes min';
+    } else {
+      final hours = minutes / 60;
+      final remainingMinutes = minutes % 60;
+      return '${hours.floor()} hr ${remainingMinutes > 0 ? '$remainingMinutes min' : ''}';
+    }
+  }
+
+  @override
+  List<Object> get props => [
+    destination,
+    currentPosition,
+    route,
+    pausedAt,
+    if (nextStep != null) nextStep!,
+    if (distanceToDestination != null) distanceToDestination!,
+    if (estimatedTimeInSeconds != null) estimatedTimeInSeconds!,
+  ];
+}

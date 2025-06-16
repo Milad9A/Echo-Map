@@ -177,6 +177,9 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       case NavigationStatus.active:
         // Active state is handled by position updates
         break;
+      case NavigationStatus.paused:
+        // Paused state is handled by pause event
+        break;
       case NavigationStatus.rerouting:
         if (state is NavigationActive &&
             _navigationService.currentPosition != null) {
@@ -334,18 +337,59 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
   void _onPauseNavigation(
     PauseNavigation event,
     Emitter<NavigationState> emit,
-  ) {
-    // Implementation for pausing navigation
-    // This would typically pause location updates and feedback
-    // but retain the current route and state
+  ) async {
+    if (state is NavigationActive) {
+      final currentState = state as NavigationActive;
+
+      // Pause the navigation service
+      await _navigationService.pauseNavigation();
+
+      // Stop vibration feedback
+      _vibrationService.stopVibration();
+
+      // Emit paused state
+      emit(
+        NavigationPaused(
+          destination: currentState.destination,
+          currentPosition: currentState.currentPosition,
+          route: currentState.route,
+          nextStep: currentState.nextStep,
+          distanceToDestination: currentState.distanceToDestination,
+          estimatedTimeInSeconds: currentState.estimatedTimeInSeconds,
+        ),
+      );
+
+      // Provide pause feedback
+      _vibrationService.pauseNavigationFeedback();
+    }
   }
 
-  void _onResumeNavigation(
+  Future<void> _onResumeNavigation(
     ResumeNavigation event,
     Emitter<NavigationState> emit,
-  ) {
-    // Implementation for resuming navigation
-    // This would restart location updates and feedback
+  ) async {
+    if (state is NavigationPaused) {
+      final currentState = state as NavigationPaused;
+
+      // Resume the navigation service
+      await _navigationService.resumeNavigation();
+
+      // Emit active state
+      emit(
+        NavigationActive(
+          destination: currentState.destination,
+          currentPosition: currentState.currentPosition,
+          route: currentState.route,
+          nextStep: currentState.nextStep,
+          distanceToDestination: currentState.distanceToDestination,
+          estimatedTimeInSeconds: currentState.estimatedTimeInSeconds,
+          isOnRoute: _navigationService.isOnRoute,
+        ),
+      );
+
+      // Provide resume feedback
+      _vibrationService.onRouteFeedback();
+    }
   }
 
   void _onUpdateLocation(UpdateLocation event, Emitter<NavigationState> emit) {

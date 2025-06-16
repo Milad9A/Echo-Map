@@ -15,6 +15,7 @@ import 'services/vibration_service.dart';
 import 'services/location_service.dart';
 import 'services/geocoding_service.dart';
 import 'services/recent_places_service.dart';
+import 'services/settings_service.dart';
 import 'utils/platform_config.dart';
 import 'utils/theme_config.dart';
 
@@ -50,6 +51,9 @@ void main() async {
 
   final recentPlacesService = RecentPlacesService();
   await recentPlacesService.initialize();
+
+  // Initialize settings service
+  await SettingsService().initialize();
 
   runApp(const EchoMapApp());
 }

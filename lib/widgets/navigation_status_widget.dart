@@ -43,6 +43,8 @@ class NavigationStatusWidget extends StatelessWidget {
   Widget _buildContent(BuildContext context, NavigationState state) {
     if (state is NavigationActive) {
       return _buildActiveState(context, state);
+    } else if (state is NavigationPaused) {
+      return _buildPausedState(context, state);
     } else if (state is NavigationRerouting) {
       return _buildReroutingState(context, state);
     } else if (state is NavigationArrived) {
@@ -188,6 +190,141 @@ class NavigationStatusWidget extends StatelessWidget {
           if (showControls) ...[
             const SizedBox(height: 12),
             _buildControlButtons(context),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPausedState(BuildContext context, NavigationPaused state) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.pause_circle,
+              color: Colors.orange,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Navigation Paused',
+                style: TextStyle(
+                  fontSize: isCompact ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Destination
+        Text(
+          'To: ${state.destination}',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+
+        if (!isCompact) ...[
+          const SizedBox(height: 8),
+
+          // Distance and Time Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoItem(
+                  icon: Icons.straighten,
+                  label: 'Distance',
+                  value: state.distanceText,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildInfoItem(
+                  icon: Icons.schedule,
+                  label: 'Time',
+                  value: state.timeText,
+                ),
+              ),
+            ],
+          ),
+
+          // Next Step
+          if (state.nextStep != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _getTurnIcon(state.nextStep!.turnDirection),
+                    size: 20,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      state.nextStep!.instruction,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Pause info
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.orange,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Navigation is paused. Tap Resume to continue.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Controls
+          if (showControls) ...[
+            const SizedBox(height: 12),
+            _buildPausedControlButtons(context),
           ],
         ],
       ],
@@ -452,6 +589,48 @@ class NavigationStatusWidget extends StatelessWidget {
             ),
             child: const Text(
               'Pause',
+              style: TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () {
+              context.read<NavigationBloc>().add(StopNavigation());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+            child: const Text(
+              'Stop',
+              style: TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPausedControlButtons(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () {
+              context.read<NavigationBloc>().add(ResumeNavigation());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ThemeConfig.accentColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+            child: const Text(
+              'Resume',
               style: TextStyle(fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
