@@ -13,6 +13,8 @@ import 'screens/location_test/location_test_screen.dart';
 import 'screens/map/map_screen.dart';
 import 'services/vibration_service.dart';
 import 'services/location_service.dart';
+import 'services/geocoding_service.dart';
+import 'services/recent_places_service.dart';
 import 'utils/platform_config.dart';
 import 'utils/theme_config.dart';
 
@@ -42,6 +44,12 @@ void main() async {
 
   final locationService = LocationService();
   await locationService.initialize();
+
+  final geocodingService = GeocodingService();
+  await geocodingService.initialize();
+
+  final recentPlacesService = RecentPlacesService();
+  await recentPlacesService.initialize();
 
   runApp(const EchoMapApp());
 }

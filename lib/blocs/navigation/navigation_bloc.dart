@@ -7,6 +7,7 @@ import '../../services/mapping_service.dart';
 import '../../services/navigation_monitoring_service.dart';
 import '../../services/vibration_service.dart';
 import '../../services/routing_service.dart';
+import '../../services/geocoding_service.dart';
 import '../../models/street_crossing.dart';
 import '../../models/hazard.dart';
 import '../../services/emergency_service.dart';
@@ -20,6 +21,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
   final NavigationMonitoringService _navigationService =
       NavigationMonitoringService();
   final RoutingService _routingService = RoutingService();
+  final GeocodingService _geocodingService = GeocodingService();
 
   final EmergencyService _emergencyService = EmergencyService();
 
@@ -103,11 +105,10 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     });
 
     // Subscribe to destination reached events
-    _destinationReachedSubscription = _navigationService
-        .destinationReachedStream
-        .listen((position) {
-          add(DestinationReached(position));
-        });
+    _destinationReachedSubscription =
+        _navigationService.destinationReachedStream.listen((position) {
+      add(DestinationReached(position));
+    });
 
     // Subscribe to rerouting events
     _reroutingSubscription = _navigationService.reroutingStream.listen((
@@ -211,13 +212,33 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
         return;
       }
 
-      // TODO: Implement geocoding to get destination coordinates
-      // For now, just use a placeholder destination 1km north
       final originLatLng = LatLng(position.latitude, position.longitude);
-      final destinationLatLng = LatLng(
-        position.latitude + 0.01, // Roughly 1km north
-        position.longitude,
-      );
+
+      // Use geocoding to convert destination string to coordinates
+      LatLng? destinationLatLng;
+
+      try {
+        final geocodingResults = await _geocodingService.geocodeAddress(event.destination);
+        
+        if (geocodingResults.isEmpty) {
+          emit(NavigationError(message: "Destination '${event.destination}' not found"));
+          return;
+        }
+
+        // Use the first (most relevant) result
+        final bestResult = geocodingResults.first;
+        destinationLatLng = bestResult.coordinates;
+
+        // Validate the coordinates
+        if (!_geocodingService.isValidCoordinate(destinationLatLng)) {
+          emit(NavigationError(message: "Invalid destination coordinates"));
+          return;
+        }
+
+      } catch (e) {
+        emit(NavigationError(message: "Failed to find destination: $e"));
+        return;
+      }
 
       // Calculate route
       final route = await _routingService.calculateRoute(
@@ -227,7 +248,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       );
 
       if (route == null) {
-        emit(NavigationError(message: "Couldn't calculate route"));
+        emit(NavigationError(message: "Couldn't calculate route to destination"));
         return;
       }
 
@@ -557,8 +578,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
         NavigationEmergency(
           emergencyType: 'STOP',
           description: event.reason,
-          currentPosition:
-              event.position ??
+          currentPosition: event.position ??
               (state is NavigationActive
                   ? (state as NavigationActive).currentPosition
                   : null),
@@ -679,8 +699,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
         NavigationEmergency(
           emergencyType: event.type,
           description: event.description,
-          currentPosition:
-              event.location ??
+          currentPosition: event.location ??
               (state is NavigationActive
                   ? (state as NavigationActive).currentPosition
                   : null),

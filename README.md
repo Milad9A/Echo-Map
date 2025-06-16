@@ -16,18 +16,18 @@ EchoMap is currently in active development. The core functionality includes:
 
 EchoMap uses carefully designed haptic patterns to communicate navigation information:
 
-| Pattern | Description | Usage |
-|---------|-------------|-------|
-| onRoute | Short, consistent taps | Confirms you're following the correct path |
-| approachingTurn | Ascending intensity pattern | Warns about an upcoming turn |
-| leftTurn | Strong-weak-weak pattern | Indicates a left turn |
-| rightTurn | Weak-weak-strong pattern | Indicates a right turn |
-| uTurn | Double-strong pulses | Signals to make a U-turn |
-| wrongDirection | Strong, attention-grabbing pattern | Alerts when you're off route |
-| destinationReached | Celebratory pattern | Confirms arrival at destination |
-| crossingStreet | Double-tap pattern with pause | Warns about street crossings |
-| hazardWarning | Urgent, repeating pattern | Alerts about potential hazards |
-| recalculating | Rapid, staccato vibrations | Indicates route recalculation |
+| Pattern            | Description                        | Usage                                      |
+| ------------------ | ---------------------------------- | ------------------------------------------ |
+| onRoute            | Short, consistent taps             | Confirms you're following the correct path |
+| approachingTurn    | Ascending intensity pattern        | Warns about an upcoming turn               |
+| leftTurn           | Strong-weak-weak pattern           | Indicates a left turn                      |
+| rightTurn          | Weak-weak-strong pattern           | Indicates a right turn                     |
+| uTurn              | Double-strong pulses               | Signals to make a U-turn                   |
+| wrongDirection     | Strong, attention-grabbing pattern | Alerts when you're off route               |
+| destinationReached | Celebratory pattern                | Confirms arrival at destination            |
+| crossingStreet     | Double-tap pattern with pause      | Warns about street crossings               |
+| hazardWarning      | Urgent, repeating pattern          | Alerts about potential hazards             |
+| recalculating      | Rapid, staccato vibrations         | Indicates route recalculation              |
 
 ## Environment Setup
 
@@ -36,11 +36,13 @@ This project uses environment variables to manage API keys and other sensitive i
 ### Setup Steps
 
 1. Create a copy of the `.env.example` file and name it `.env`:
+
    ```
    cp .env.example .env
    ```
 
 2. Edit the `.env` file and add your API keys:
+
    ```
    GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    ```

@@ -8,6 +8,11 @@ class ThemeConfig {
   static const Color accentColor = Color(0xFF00CC66); // Green
   static const Color errorColor = Color(0xFFCC0000); // Red
 
+  // Additional colors for enhanced interface
+  static const Color warningColor = Color(0xFFFF9800); // Amber
+  static const Color successColor = Color(0xFF4CAF50); // Material Green
+  static const Color infoColor = Color(0xFF2196F3); // Material Blue
+
   // Background colors
   static const Color backgroundLight = Color(0xFFF5F5F5); // Almost white
   static const Color backgroundDark = Color(0xFF121212); // Almost black

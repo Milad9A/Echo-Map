@@ -160,13 +160,13 @@ class RouteInformation extends Equatable {
 
   @override
   List<Object?> get props => [
-    polylinePoints,
-    distanceMeters,
-    durationSeconds,
-    steps,
-    waypoints,
-    createdAt,
-  ];
+        polylinePoints,
+        distanceMeters,
+        durationSeconds,
+        steps,
+        waypoints,
+        createdAt,
+      ];
 }
 
 class RouteStep extends Equatable {
@@ -238,11 +238,11 @@ class RouteStep extends Equatable {
 
   @override
   List<Object?> get props => [
-    instruction,
-    maneuver,
-    distanceMeters,
-    durationSeconds,
-    startLocation,
-    endLocation,
-  ];
+        instruction,
+        maneuver,
+        distanceMeters,
+        durationSeconds,
+        startLocation,
+        endLocation,
+      ];
 }

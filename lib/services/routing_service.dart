@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide RouteInformation;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
-import 'package:dio/dio.dart';
 import '../models/waypoint.dart';
 import '../models/route_information.dart';
 import '../utils/env.dart'; // Import env utility instead of secrets
@@ -16,15 +16,15 @@ class RoutingService {
   factory RoutingService() => _instance;
   RoutingService._internal();
 
-  // Google Directions API endpoint
-  static const String _baseUrl =
-      'https://maps.googleapis.com/maps/api/directions/json';
-
-  // Get API key from environment variables
-  static String get _apiKey => Env.googleMapsApiKey;
-
   // HTTP client
   final Dio _dio = Dio();
+  final PolylinePoints _polylinePoints = PolylinePoints();
+
+  // Initialize the service
+  Future<void> initialize() async {
+    _dio.options.connectTimeout = const Duration(seconds: 10);
+    _dio.options.receiveTimeout = const Duration(seconds: 10);
+  }
 
   // Calculate route between two points
   Future<RouteInformation?> calculateRoute(
@@ -34,161 +34,205 @@ class RoutingService {
     TravelMode mode = TravelMode.walking,
   }) async {
     try {
-      // Build waypoints string if any waypoints are provided
-      String waypointsString = '';
-      if (waypoints.isNotEmpty) {
-        waypointsString =
-            'waypoints=optimize:true|${waypoints.map((point) => '${point.latitude},${point.longitude}').join('|')}';
-      }
-
-      // Convert travel mode to string
-      String travelMode;
-      switch (mode) {
-        case TravelMode.walking:
-          travelMode = 'walking';
-          break;
-        case TravelMode.cycling:
-          travelMode = 'bicycling';
-          break;
-        case TravelMode.driving:
-          travelMode = 'driving';
-          break;
-        case TravelMode.transit:
-          travelMode = 'transit';
-          break;
-      }
-
-      // Build the request URL
-      final url =
-          '$_baseUrl?'
-          'origin=${origin.latitude},${origin.longitude}'
-          '&destination=${destination.latitude},${destination.longitude}'
-          '${waypointsString.isNotEmpty ? '&$waypointsString' : ''}'
-          '&mode=$travelMode'
-          '&key=$_apiKey';
-
-      // Make the API request
-      final response = await _dio.get(url);
-
-      // Check if the request was successful
-      if (response.data['status'] == 'OK') {
-        // Parse the route data
-        return _parseRouteFromResponse(response.data);
-      } else {
-        // Handle API error
-        debugPrint('Error calculating route: ${response.data['status']}');
+      final apiKey = Env.googleMapsApiKey;
+      if (apiKey.isEmpty) {
+        debugPrint('Google Maps API key not found');
         return null;
       }
+
+      // Build API URL
+      final url =
+          _buildDirectionsUrl(origin, destination, mode, waypoints, apiKey);
+
+      debugPrint('Requesting directions from: $url');
+
+      // Make API request
+      final response = await _dio.get(url);
+
+      if (response.statusCode != 200) {
+        debugPrint('Directions API returned status: ${response.statusCode}');
+        return null;
+      }
+
+      final data = response.data;
+
+      if (data['status'] != 'OK') {
+        debugPrint(
+            'Directions API error: ${data['status']} - ${data['error_message'] ?? 'Unknown error'}');
+        return null;
+      }
+
+      if (data['routes'] == null || (data['routes'] as List).isEmpty) {
+        debugPrint('No routes found in response');
+        return null;
+      }
+
+      // Parse the route
+      return _parseRoute(data['routes'][0], origin, destination);
     } catch (e) {
-      debugPrint('Exception calculating route: $e');
+      debugPrint('Error calculating route: $e');
       return null;
     }
   }
 
-  // Parse route information from API response
-  RouteInformation _parseRouteFromResponse(Map<String, dynamic> response) {
-    // Get the first route from the response (we can extend this to handle alternatives)
-    final route = response['routes'][0];
+  // Build Google Directions API URL
+  String _buildDirectionsUrl(
+    LatLng origin,
+    LatLng destination,
+    TravelMode mode,
+    List<LatLng> waypoints,
+    String apiKey,
+  ) {
+    final buffer = StringBuffer();
+    buffer.write('https://maps.googleapis.com/maps/api/directions/json?');
 
-    // Get the route's encoded polyline
-    final encodedPolyline = route['overview_polyline']['points'];
+    // Origin and destination
+    buffer.write('origin=${origin.latitude},${origin.longitude}');
+    buffer
+        .write('&destination=${destination.latitude},${destination.longitude}');
 
-    // Decode the polyline to get the list of points
-    final polylinePoints = PolylinePoints()
-        .decodePolyline(encodedPolyline)
-        .map((point) => LatLng(point.latitude, point.longitude))
-        .toList();
+    // Travel mode
+    buffer.write('&mode=${_getTravelModeString(mode)}');
 
-    // Get the route's legs (segments between waypoints)
-    final legs = route['legs'];
+    // Waypoints
+    if (waypoints.isNotEmpty) {
+      final waypointStr =
+          waypoints.map((wp) => '${wp.latitude},${wp.longitude}').join('|');
+      buffer.write('&waypoints=$waypointStr');
+    }
 
-    // Extract distance and duration
-    int totalDistanceMeters = 0;
-    int totalDurationSeconds = 0;
+    // Additional parameters
+    buffer.write('&units=metric');
+    buffer.write('&language=en');
+    buffer.write('&alternatives=false');
+    buffer.write('&key=$apiKey');
 
-    // Extract steps (turn-by-turn instructions)
-    final List<RouteStep> steps = [];
+    return buffer.toString();
+  }
 
-    for (var leg in legs) {
-      totalDistanceMeters += (leg['distance']['value'] as num).toInt();
-      totalDurationSeconds += (leg['duration']['value'] as num).toInt();
+  // Convert TravelMode enum to API string
+  String _getTravelModeString(TravelMode mode) {
+    switch (mode) {
+      case TravelMode.walking:
+        return 'walking';
+      case TravelMode.cycling:
+        return 'bicycling';
+      case TravelMode.driving:
+        return 'driving';
+      case TravelMode.transit:
+        return 'transit';
+    }
+  }
 
-      // Extract steps from this leg
-      for (var step in leg['steps']) {
-        final instruction = step['html_instructions'];
-        final maneuver = step['maneuver'] ?? '';
-        final distance = step['distance']['value'];
-        final duration = step['duration']['value'];
-        final startLocation = LatLng(
-          step['start_location']['lat'],
-          step['start_location']['lng'],
-        );
-        final endLocation = LatLng(
-          step['end_location']['lat'],
-          step['end_location']['lng'],
-        );
+  // Parse Google Directions API response into RouteInformation
+  RouteInformation? _parseRoute(
+    Map<String, dynamic> route,
+    LatLng origin,
+    LatLng destination,
+  ) {
+    try {
+      final legs = route['legs'] as List;
+      if (legs.isEmpty) return null;
 
-        steps.add(
-          RouteStep(
-            instruction: instruction,
-            maneuver: maneuver,
-            distanceMeters: distance,
-            durationSeconds: duration,
-            startLocation: startLocation,
-            endLocation: endLocation,
+      final firstLeg = legs[0];
+
+      // Extract basic route info
+      final distance = firstLeg['distance']['value'] as int; // meters
+      final duration = firstLeg['duration']['value'] as int; // seconds
+
+      // Decode polyline
+      final polylineString = route['overview_polyline']['points'] as String;
+      final polylineCoordinates =
+          _polylinePoints.decodePolyline(polylineString);
+
+      final polylinePoints = polylineCoordinates
+          .map((point) => LatLng(point.latitude, point.longitude))
+          .toList();
+
+      // Parse steps
+      final steps = _parseSteps(firstLeg['steps'] as List);
+
+      // Create waypoints
+      final waypoints = [
+        Waypoint(
+          position: origin,
+          name: 'Starting Point',
+          type: WaypointType.origin,
+        ),
+        Waypoint(
+          position: destination,
+          name: 'Destination',
+          type: WaypointType.destination,
+        ),
+      ];
+
+      return RouteInformation(
+        polylinePoints: polylinePoints,
+        distanceMeters: distance,
+        durationSeconds: duration,
+        steps: steps,
+        waypoints: waypoints,
+      );
+    } catch (e) {
+      debugPrint('Error parsing route: $e');
+      return null;
+    }
+  }
+
+  // Parse route steps from Google Directions API
+  List<RouteStep> _parseSteps(List<dynamic> stepsData) {
+    final steps = <RouteStep>[];
+
+    for (final stepData in stepsData) {
+      try {
+        final startLocation = stepData['start_location'];
+        final endLocation = stepData['end_location'];
+
+        final step = RouteStep(
+          instruction:
+              _cleanHtmlInstruction(stepData['html_instructions'] as String),
+          maneuver: stepData['maneuver'] as String? ?? 'straight',
+          distanceMeters: stepData['distance']['value'] as int,
+          durationSeconds: stepData['duration']['value'] as int,
+          startLocation: LatLng(
+            startLocation['lat'] as double,
+            startLocation['lng'] as double,
+          ),
+          endLocation: LatLng(
+            endLocation['lat'] as double,
+            endLocation['lng'] as double,
           ),
         );
+
+        steps.add(step);
+      } catch (e) {
+        debugPrint('Error parsing step: $e');
+        // Continue with other steps
       }
     }
 
-    // Create waypoints from route data
-    final List<Waypoint> routeWaypoints = [];
+    return steps;
+  }
 
-    // Add origin waypoint
-    routeWaypoints.add(
-      Waypoint(
-        position: LatLng(
-          legs[0]['start_location']['lat'],
-          legs[0]['start_location']['lng'],
-        ),
-        name: legs[0]['start_address'],
-        type: WaypointType.origin,
-      ),
-    );
+  // Clean HTML tags from instruction text
+  String _cleanHtmlInstruction(String htmlInstruction) {
+    // Remove HTML tags
+    String cleaned = htmlInstruction.replaceAll(RegExp(r'<[^>]*>'), '');
 
-    // Add intermediate waypoints if there are multiple legs
-    for (int i = 0; i < legs.length - 1; i++) {
-      routeWaypoints.add(
-        Waypoint(
-          position: LatLng(
-            legs[i]['end_location']['lat'],
-            legs[i]['end_location']['lng'],
-          ),
-          name: legs[i]['end_address'],
-          type: WaypointType.intermediate,
-        ),
-      );
-    }
+    // Decode HTML entities
+    cleaned = cleaned
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&nbsp;', ' ');
 
-    // Add destination waypoint
-    routeWaypoints.add(
-      Waypoint(
-        position: LatLng(
-          legs.last['end_location']['lat'],
-          legs.last['end_location']['lng'],
-        ),
-        name: legs.last['end_address'],
-        type: WaypointType.destination,
-      ),
-    );
+    return cleaned.trim();
+  }
 
-    // Create and return the route information
-    return RouteInformation(
-      polylinePoints: polylinePoints,
-      distanceMeters: totalDistanceMeters,
-      durationSeconds: totalDurationSeconds,
-      steps: steps,
-      waypoints: routeWaypoints,
-    );
+  // Dispose resources
+  void dispose() {
+    _dio.close();
   }
 }

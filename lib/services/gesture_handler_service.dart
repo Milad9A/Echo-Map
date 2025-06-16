@@ -3,7 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shake/shake.dart';
 
-enum GestureType { doubleTap, swipeDown, shake, longPress, tripleTap }
+enum GestureType {
+  shake,
+  doubleTap,
+  swipeDown,
+  swipeUp,
+  swipeLeft,
+  swipeRight,
+  longPress,
+}
 
 class GestureHandlerService {
   // Singleton pattern
@@ -14,44 +22,42 @@ class GestureHandlerService {
 
   // Shake detector
   ShakeDetector? _shakeDetector;
-  bool _isShakeDetectorActive = false;
+  bool _isInitialized = false;
 
   // Stream controller for gesture events
-  final _gestureController = StreamController<GestureType>.broadcast();
+  final StreamController<GestureType> _gestureController =
+      StreamController<GestureType>.broadcast();
 
   // Public stream
   Stream<GestureType> get gestureStream => _gestureController.stream;
 
   // Initialize the gesture handler
   void initialize() {
-    // Initialize shake detector
-    _shakeDetector = ShakeDetector.autoStart(
-      onPhoneShake: (event) {
-        _gestureController.add(GestureType.shake);
-      },
-      minimumShakeCount: 2,
-      shakeSlopTimeMS: 500,
-      shakeCountResetTime: 3000,
-      shakeThresholdGravity: 2.7,
-    );
+    if (_isInitialized) return;
 
-    _isShakeDetectorActive = true;
+    try {
+      // Initialize shake detection
+      _shakeDetector = ShakeDetector.autoStart(
+        onPhoneShake: (_) => {
+          debugPrint('Shake detected'),
+          _gestureController.add(GestureType.shake)
+        },
+        minimumShakeCount: 1,
+        shakeSlopTimeMS: 500,
+        shakeCountResetTime: 3000,
+        shakeThresholdGravity: 2.7,
+      );
+
+      _isInitialized = true;
+      debugPrint('GestureHandlerService initialized');
+    } catch (e) {
+      debugPrint('Error initializing gesture handler: $e');
+    }
   }
 
   // Report a gesture event
-  void reportGesture(GestureType gesture) {
+  void triggerGesture(GestureType gesture) {
     _gestureController.add(gesture);
-  }
-
-  // Enable or disable shake detection
-  void setShakeDetection(bool enabled) {
-    if (enabled && !_isShakeDetectorActive) {
-      _shakeDetector?.startListening();
-      _isShakeDetectorActive = true;
-    } else if (!enabled && _isShakeDetectorActive) {
-      _shakeDetector?.stopListening();
-      _isShakeDetectorActive = false;
-    }
   }
 
   // Vibrate on gesture recognition for haptic feedback
@@ -70,7 +76,9 @@ class GestureHandlerService {
   // Dispose of resources
   void dispose() {
     _shakeDetector?.stopListening();
+    _shakeDetector = null;
     _gestureController.close();
+    _isInitialized = false;
   }
 }
 
@@ -100,7 +108,7 @@ class AccessibleGestureDetector extends StatelessWidget {
           ? () {
               if (provideFeedback) HapticFeedback.selectionClick();
               onDoubleTap!();
-              GestureHandlerService().reportGesture(GestureType.doubleTap);
+              GestureHandlerService().triggerGesture(GestureType.doubleTap);
             }
           : null,
       onVerticalDragEnd: onSwipeDown != null
@@ -108,7 +116,7 @@ class AccessibleGestureDetector extends StatelessWidget {
               if (details.velocity.pixelsPerSecond.dy > 200) {
                 if (provideFeedback) HapticFeedback.mediumImpact();
                 onSwipeDown!();
-                GestureHandlerService().reportGesture(GestureType.swipeDown);
+                GestureHandlerService().triggerGesture(GestureType.swipeDown);
               }
             }
           : null,
@@ -116,7 +124,7 @@ class AccessibleGestureDetector extends StatelessWidget {
           ? () {
               if (provideFeedback) HapticFeedback.heavyImpact();
               onLongPress!();
-              GestureHandlerService().reportGesture(GestureType.longPress);
+              GestureHandlerService().triggerGesture(GestureType.longPress);
             }
           : null,
       child: child,

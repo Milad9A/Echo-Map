@@ -2,25 +2,25 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:equatable/equatable.dart';
 
 enum HazardType {
-  construction,      // Construction zone
-  obstacle,          // Physical obstacle on path
-  steepIncline,      // Steep hill or ramp
-  steepDecline,      // Steep downhill section
-  narrowPath,        // Narrow sidewalk or path
-  uneven,            // Uneven surface
-  slippery,          // Slippery surface
-  roadWork,          // Road work zone
-  crossingClosure,   // Crossing is closed
-  temporaryBarrier,  // Temporary barrier
-  missingPaving,     // Missing pavement/tactile surface
-  other              // Other hazard types
+  construction, // Construction zone
+  obstacle, // Physical obstacle on path
+  steepIncline, // Steep hill or ramp
+  steepDecline, // Steep downhill section
+  narrowPath, // Narrow sidewalk or path
+  uneven, // Uneven surface
+  slippery, // Slippery surface
+  roadWork, // Road work zone
+  crossingClosure, // Crossing is closed
+  temporaryBarrier, // Temporary barrier
+  missingPaving, // Missing pavement/tactile surface
+  other, // Other hazard types
 }
 
 enum HazardSeverity {
-  low,      // Minimal impact, awareness recommended
-  medium,   // Moderate impact, caution advised
-  high,     // Significant impact, strong caution required
-  critical  // Extremely dangerous, avoid if possible
+  low, // Minimal impact, awareness recommended
+  medium, // Moderate impact, caution advised
+  high, // Significant impact, strong caution required
+  critical, // Extremely dangerous, avoid if possible
 }
 
 class Hazard extends Equatable {
@@ -32,7 +32,7 @@ class Hazard extends Equatable {
   final DateTime reportedAt;
   final DateTime? validUntil;
   final bool isVerified;
-  final double radius;  // Area of effect in meters
+  final double radius; // Area of effect in meters
   final String? reportedBy;
   final int? verificationCount;
   final Map<String, dynamic>? additionalInfo;
@@ -150,14 +150,14 @@ class Hazard extends Equatable {
         severityText = 'Critical';
         break;
     }
-    
+
     return '$severityText hazard: $description';
   }
 
   // Get priority level for notifications (1-10)
   int getPriorityLevel() {
     int priority = 5; // Default medium priority
-    
+
     // Adjust based on severity
     switch (severity) {
       case HazardSeverity.low:
@@ -173,15 +173,15 @@ class Hazard extends Equatable {
         priority = 10;
         break;
     }
-    
+
     // Increase priority for verified hazards
     if (isVerified) priority += 1;
-    
+
     // Adjust based on verification count
     if (verificationCount != null && verificationCount! > 3) {
       priority += 1;
     }
-    
+
     return priority.clamp(1, 10);
   }
 
@@ -199,4 +199,3 @@ class Hazard extends Equatable {
     radius,
   ];
 }
-
