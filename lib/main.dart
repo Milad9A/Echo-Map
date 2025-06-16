@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:echo_map/screens/settings/settings_screen.dart';
+import 'package:echo_map/screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -107,18 +108,23 @@ class _EchoMapAppState extends State<EchoMapApp> {
         ),
       ],
       child: MaterialApp(
-        title: 'EchoMap',
+        title: 'Echo Map',
         debugShowCheckedModeBanner: false,
         theme: _getTheme(ThemeMode.light),
         darkTheme: _getTheme(ThemeMode.dark),
         themeMode: _convertThemeMode(_currentSettings.themeMode),
-        home: const HomeScreen(),
+        initialRoute: '/',
         routes: {
-          '/home': (context) => const HomeScreen(),
+          '/': (context) => const SplashScreen(),
           '/map': (context) => const MapScreen(),
           '/settings': (context) => const SettingsScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),
           '/location_test': (context) => const LocationTestScreen(),
+        },
+        onUnknownRoute: (settings) {
+          return MaterialPageRoute(
+            builder: (context) => const HomeScreen(),
+          );
         },
       ),
     );

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math';
 import '../services/vibration_service.dart';
 import 'package:flutter/foundation.dart';
 
@@ -106,149 +105,145 @@ class VibrationPatternTester {
     return totalDuration;
   }
 
-  // Compare two patterns side by side with enhanced distinctiveness
+  /// Compare two vibration patterns by playing them one after another
   Future<void> comparePatterns(
     String pattern1,
     String pattern2, {
-    int intensity = VibrationService.mediumIntensity,
-    int delaySeconds = 2,
+    int intensity = 128,
+    Duration delayBetween = const Duration(seconds: 2),
   }) async {
-    // On iOS, use longer delays
-    final compareDelay = _isIOS ? delaySeconds + 1 : delaySeconds;
-
-    debugPrint(
-      'Comparing patterns: $pattern1 vs $pattern2 on $_platformName with intensity: $intensity',
-    );
-
-    // Check if platform is supported
-    if (!_isIOS && !_isAndroid) {
-      debugPrint(
-        'Warning: Vibration comparison on $_platformName may not be supported',
-      );
-    }
+    debugPrint('Comparing patterns: $pattern1 vs $pattern2');
 
     // Play first pattern
-    await _vibrationService.stopVibration();
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    // Announce first pattern
-    debugPrint('Now playing: $pattern1');
     await _vibrationService.playPattern(pattern1, intensity: intensity);
 
-    // Wait for the pattern to complete
-    int pattern1Duration = _calculatePatternDuration(pattern1);
-    await Future.delayed(Duration(milliseconds: max(pattern1Duration, 1000)));
+    // Wait between patterns
+    await Future.delayed(delayBetween);
 
-    // Stop vibration between patterns
-    await _vibrationService.stopVibration();
-    await Future.delayed(Duration(seconds: compareDelay));
-
-    // Announce second pattern
-    debugPrint('Now playing: $pattern2');
+    // Play second pattern
     await _vibrationService.playPattern(pattern2, intensity: intensity);
   }
 
-  // Test pattern at different intensity levels
-  Future<void> testPatternIntensities(String patternName) async {
-    debugPrint('Testing pattern: $patternName at different intensity levels');
+  /// Test all available patterns in sequence
+  Future<void> testAllPatternsSequentially({
+    int intensity = 128,
+    Duration delayBetween = const Duration(seconds: 1),
+  }) async {
+    final patterns = VibrationService.patterns.keys.toList();
 
-    // Test at low intensity
-    debugPrint('Testing at LOW intensity: ${VibrationService.lowIntensity}');
-    await _vibrationService.playPattern(
-      patternName,
-      intensity: VibrationService.lowIntensity,
-    );
-    await Future.delayed(const Duration(seconds: 2));
-    await _vibrationService.stopVibration();
-    await Future.delayed(const Duration(milliseconds: 500));
+    debugPrint('Testing ${patterns.length} vibration patterns');
 
-    // Test at medium intensity
-    debugPrint(
-      'Testing at MEDIUM intensity: ${VibrationService.mediumIntensity}',
-    );
-    await _vibrationService.playPattern(
-      patternName,
-      intensity: VibrationService.mediumIntensity,
-    );
-    await Future.delayed(const Duration(seconds: 2));
-    await _vibrationService.stopVibration();
-    await Future.delayed(const Duration(milliseconds: 500));
+    for (int i = 0; i < patterns.length; i++) {
+      final pattern = patterns[i];
+      debugPrint('Testing pattern ${i + 1}/${patterns.length}: $pattern');
 
-    // Test at high intensity
-    debugPrint('Testing at HIGH intensity: ${VibrationService.highIntensity}');
-    await _vibrationService.playPattern(
-      patternName,
-      intensity: VibrationService.highIntensity,
-    );
+      await _vibrationService.playPattern(pattern, intensity: intensity);
+
+      // Don't wait after the last pattern
+      if (i < patterns.length - 1) {
+        await Future.delayed(delayBetween);
+      }
+    }
+
+    debugPrint('Pattern testing complete');
   }
 
-  // Cancel any ongoing vibration test
-  void cancelTest() {
-    _vibrationService.stopVibration();
+  /// Test a specific pattern multiple times
+  Future<void> repeatPattern(
+    String patternName, {
+    int repetitions = 3,
+    int intensity = 128,
+    Duration delayBetween = const Duration(milliseconds: 800),
+  }) async {
+    debugPrint('Repeating pattern "$patternName" $repetitions times');
+
+    for (int i = 0; i < repetitions; i++) {
+      await _vibrationService.playPattern(patternName, intensity: intensity);
+
+      if (i < repetitions - 1) {
+        await Future.delayed(delayBetween);
+      }
+    }
   }
 
-  // Test navigation sequence simulation
-  Future<void> testNavigationSequence() async {
-    debugPrint('Testing navigation sequence...');
+  /// Test pattern at different intensities
+  Future<void> testPatternIntensities(
+    String patternName, {
+    List<int> intensities = const [64, 128, 192, 255],
+    Duration delayBetween = const Duration(seconds: 1),
+  }) async {
+    debugPrint('Testing pattern "$patternName" at different intensities');
 
-    // Simulate navigation start
-    await _vibrationService.onRouteFeedback();
-    await Future.delayed(const Duration(seconds: 2));
+    for (int i = 0; i < intensities.length; i++) {
+      final intensity = intensities[i];
+      debugPrint('Testing intensity: $intensity');
 
-    // Simulate approaching turn
-    await _vibrationService.approachingTurnFeedback();
-    await Future.delayed(const Duration(seconds: 2));
+      await _vibrationService.playPattern(patternName, intensity: intensity);
 
-    // Simulate left turn
-    await _vibrationService.leftTurnFeedback();
-    await Future.delayed(const Duration(seconds: 3));
-
-    // Back on route
-    await _vibrationService.onRouteFeedback();
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Simulate destination reached
-    await _vibrationService.destinationReachedFeedback();
-
-    debugPrint('Navigation sequence test completed');
+      if (i < intensities.length - 1) {
+        await Future.delayed(delayBetween);
+      }
+    }
   }
 
-  // Test error conditions
-  Future<void> testErrorPatterns() async {
-    debugPrint('Testing error patterns...');
+  /// Get pattern information for display
+  Map<String, dynamic> getPatternInfo(String patternName) {
+    final pattern = VibrationService.patterns[patternName];
+    if (pattern == null) {
+      return {
+        'exists': false,
+        'error': 'Pattern not found',
+      };
+    }
 
-    // Wrong direction
-    await _vibrationService.wrongDirectionFeedback();
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Hazard warning
-    await _vibrationService.hazardWarningFeedback();
-    await Future.delayed(const Duration(seconds: 2));
-
-    debugPrint('Error pattern testing completed');
+    return {
+      'exists': true,
+      'name': patternName,
+      'description': _getPatternDescription(patternName),
+      'complexity': _calculatePatternComplexity(pattern),
+      'duration': _calculatePatternDuration(patternName),
+    };
   }
 
-  // Test intensity levels for a specific pattern
-  Future<void> testIntensityLevels(String pattern) async {
-    debugPrint('Testing intensity levels for: $pattern');
+  String _getPatternDescription(String patternName) {
+    switch (patternName) {
+      case 'onRoute':
+        return 'Gentle confirmation you\'re on the right path';
+      case 'approachingTurn':
+        return 'Alerts you when a turn is coming up';
+      case 'offRoute':
+        return 'Warning that you\'ve deviated from the path';
+      case 'destinationReached':
+        return 'Celebration when you arrive at your destination';
+      case 'crossingStreet':
+        return 'Safety alert when approaching a street crossing';
+      case 'hazardWarning':
+        return 'Strong warning for obstacles or hazards ahead';
+      default:
+        return 'Navigation feedback pattern';
+    }
+  }
 
-    // Low intensity
-    debugPrint('Low intensity');
-    await _vibrationService.playPattern(pattern,
-        intensity: VibrationService.lowIntensity);
-    await Future.delayed(const Duration(seconds: 1));
+  int _calculatePatternComplexity(List<int> pattern) {
+    // Simple complexity calculation based on pattern length and variation
+    int complexity = pattern.length;
 
-    // Medium intensity
-    debugPrint('Medium intensity');
-    await _vibrationService.playPattern(pattern,
-        intensity: VibrationService.mediumIntensity);
-    await Future.delayed(const Duration(seconds: 1));
+    // Add complexity for pauses (0 values)
+    int pauses = pattern.where((value) => value == 0).length;
+    complexity += pauses;
 
-    // High intensity
-    debugPrint('High intensity');
-    await _vibrationService.playPattern(pattern,
-        intensity: VibrationService.highIntensity);
+    return complexity.clamp(1, 10);
+  }
 
-    debugPrint('Intensity testing completed');
+  /// Get recommendations for pattern testing
+  List<String> getTestingRecommendations() {
+    return [
+      'Test patterns in a quiet environment',
+      'Hold the device firmly while testing',
+      'Test at different intensity levels to find your preference',
+      'Compare similar patterns to learn the differences',
+      'Take breaks between testing sessions to avoid sensory fatigue',
+      'Test patterns you\'ll use most frequently first',
+    ];
   }
 }

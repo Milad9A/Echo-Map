@@ -143,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _announceStatus() {
     final locationState = context.read<LocationBloc>().state;
-    String status = 'EchoMap is ready. ';
+    String status = 'Echo Map is ready. ';
 
     if (locationState is LocationTracking) {
       status += 'Location tracking is active. ';
@@ -190,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('EchoMap Help'),
+          title: const Text('Echo Map Help'),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +247,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('EchoMap', semanticsLabel: 'EchoMap Navigation App'),
+        title:
+            const Text('Echo Map', semanticsLabel: 'Echo Map Navigation App'),
         centerTitle: true,
         elevation: 0,
         actions: [
@@ -394,11 +395,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           children: [
             Semantics(
-              label: 'Welcome to EchoMap',
+              label: 'Welcome to Echo Map',
               hint: 'A navigation app designed for blind and low vision users',
               header: true,
               child: const Text(
-                'Welcome to EchoMap',
+                'Welcome to Echo Map',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
