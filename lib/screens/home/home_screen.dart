@@ -277,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 position: _slideAnimation,
                 child: Column(
                   children: [
-                    // Navigation Status Widget - more prominent when active
+                    // Navigation status widget remains unchanged
                     BlocBuilder<NavigationBloc, NavigationState>(
                       builder: (context, navigationState) {
                         return NavigationStatusWidget(
@@ -286,7 +286,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               : true,
                           showControls: navigationState is NavigationActive,
                           onTap: () {
-                            // Navigate to map when tapped, but only if not already navigating
                             if (navigationState is NavigationIdle ||
                                 navigationState is NavigationError) {
                               Navigator.pushNamed(context, '/map');
@@ -295,8 +294,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         );
                       },
                     ),
-
-                    // Main content in scrollable area
+                    // Simplified main content area for a cleaner UI
                     Expanded(
                       child: SingleChildScrollView(
                         padding:
@@ -309,10 +307,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             _buildStatusSection(),
                             const SizedBox(height: ThemeConfig.largePadding),
                             _buildMainActions(),
-                            const SizedBox(height: ThemeConfig.largePadding),
-                            _buildTestingSection(),
-                            const SizedBox(height: ThemeConfig.largePadding),
-                            _buildQuickTips(),
+                            // Removed Testing and Quick Tips sections for a less cluttered interface
                           ],
                         ),
                       ),
@@ -323,14 +318,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             );
           },
         ),
-        onDoubleTap: () {
-          // Double tap to start navigation quickly
-          Navigator.pushNamed(context, '/map');
-        },
-        onSwipeDown: () {
-          // Swipe down for status announcement
-          _announceStatus();
-        },
       ),
       floatingActionButton: Semantics(
         button: true,
@@ -481,196 +468,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMainActions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Main Actions',
-          style: TextStyle(
-            fontSize: ThemeConfig.largeText,
-            fontWeight: FontWeight.bold,
-            color: ThemeConfig.primaryColor,
-          ),
+    return Semantics(
+      button: true,
+      label: 'Open map and start navigation',
+      hint: 'Navigate to the map screen to plan your route',
+      child: ElevatedButton.icon(
+        onPressed: () => Navigator.pushNamed(context, '/map'),
+        icon: const Icon(Icons.map, size: 28),
+        label: const Text(
+          'Start Navigation',
+          style: TextStyle(fontSize: ThemeConfig.largeText),
         ),
-        const SizedBox(height: ThemeConfig.standardPadding),
-        Semantics(
-          button: true,
-          label: 'Open map and start navigation',
-          hint: 'Navigate to the map screen to plan your route',
-          child: ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/map'),
-            icon: const Icon(Icons.map, size: 28),
-            label: const Text(
-              'Start Navigation',
-              style: TextStyle(fontSize: ThemeConfig.largeText),
-            ),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 60),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-              backgroundColor: ThemeConfig.primaryColor,
-              foregroundColor: Colors.white,
-            ),
-          ),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 60),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          backgroundColor: ThemeConfig.primaryColor,
+          foregroundColor: Colors.white,
         ),
-        const SizedBox(height: ThemeConfig.standardPadding),
-        Row(
-          children: [
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: 'Open map view',
-                hint: 'View the map without starting navigation',
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/map'),
-                  icon: const Icon(Icons.explore),
-                  label: const Text('Explore Map'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: ThemeConfig.secondaryColor,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: ThemeConfig.standardPadding),
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: 'Open settings',
-                hint: 'Configure app preferences and accessibility options',
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/settings'),
-                  icon: const Icon(Icons.settings),
-                  label: const Text('Settings'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTestingSection() {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(ThemeConfig.standardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Testing & Setup',
-              style: TextStyle(
-                fontSize: ThemeConfig.mediumText,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: ThemeConfig.standardPadding),
-            Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: 'Test vibration patterns',
-                    hint: 'Test and configure vibration feedback patterns',
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/vibration_test'),
-                      icon: const Icon(Icons.vibration),
-                      label: const Text('Vibration'),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 45),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: ThemeConfig.smallPadding),
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: 'Test location services',
-                    hint: 'Test and verify location tracking functionality',
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/location_test'),
-                      icon: const Icon(Icons.location_on),
-                      label: const Text('Location'),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 45),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickTips() {
-    return Card(
-      elevation: 1,
-      color: ThemeConfig.accentColor.withValues(alpha: 0.1),
-      child: Padding(
-        padding: const EdgeInsets.all(ThemeConfig.standardPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.lightbulb_outline,
-                  color: ThemeConfig.accentColor,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Quick Tips',
-                  style: TextStyle(
-                    fontSize: ThemeConfig.mediumText,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: ThemeConfig.standardPadding),
-            _buildTip('Shake your device to hear the current status'),
-            _buildTip('Double tap the screen to quickly start navigation'),
-            _buildTip('Use voice commands by tapping the microphone'),
-            _buildTip(
-                'Use the touch icon to select destinations by tapping the map'),
-            _buildTip('All features work with your screen reader'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTip(String tip) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '• ',
-            style: TextStyle(
-              color: ThemeConfig.accentColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              tip,
-              style: const TextStyle(fontSize: ThemeConfig.smallText),
-            ),
-          ),
-        ],
       ),
     );
   }
