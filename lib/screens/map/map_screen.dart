@@ -148,7 +148,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             FloatingActionButton(
               heroTag: 'mapSelection',
               onPressed: _toggleMapSelectionMode,
-              backgroundColor: Colors.blue,
               tooltip: 'Tap to select destination on map',
               child: const Icon(Icons.touch_app),
             ),

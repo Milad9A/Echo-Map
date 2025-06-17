@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:echo_map/services/settings_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -84,6 +85,11 @@ class NavigationMonitoringService {
   int _consecutiveOnRouteUpdates = 0;
   int _consecutiveOffRouteUpdates = 0;
 
+  // Add TTS and settings tracking
+  DateTime? _lastProgressAnnouncement;
+  DateTime? _lastTurnAnnouncement;
+  String? _lastAnnouncedTurn;
+
   // Getters
   NavigationStatus get status => _status;
   RouteInformation? get currentRoute => _currentRoute;
@@ -114,7 +120,7 @@ class NavigationMonitoringService {
       _statusController.add(_status);
 
       // Announce start of navigation with text-to-speech
-      _ttsService.speak('Starting navigation to ${route.destination.name}');
+      await _ttsService.announceNavigation(route.destination.name);
 
       // Start location updates
       await _startLocationTracking();
@@ -341,6 +347,9 @@ class NavigationMonitoringService {
         if (distanceToTurn <= notificationDistance && distanceToTurn > 10) {
           _upcomingTurnController.add(step);
           _vibrationService.approachingTurnFeedback();
+
+          // TTS announcement for upcoming turn
+          _announceTurnIfNeeded(step, distanceToTurn.round());
           break;
         }
         // If very close to turn
@@ -350,10 +359,50 @@ class NavigationMonitoringService {
           } else if (step.maneuver.contains('right')) {
             _vibrationService.rightTurnFeedback();
           }
+
+          // Immediate turn announcement
+          _announceImmediateTurn(step);
           break;
         }
       }
     }
+  }
+
+  // Announce turn if needed (with debouncing)
+  Future<void> _announceTurnIfNeeded(RouteStep step, int distance) async {
+    final now = DateTime.now();
+    final turnKey = '${step.turnDirection}_${step.streetName ?? 'unknown'}';
+
+    // Debounce: don't announce same turn within 15 seconds
+    if (_lastTurnAnnouncement != null &&
+        _lastAnnouncedTurn == turnKey &&
+        now.difference(_lastTurnAnnouncement!).inSeconds < 15) {
+      return;
+    }
+
+    _lastTurnAnnouncement = now;
+    _lastAnnouncedTurn = turnKey;
+
+    // Get settings for TTS announcements
+    final settings = SettingsService().currentSettings;
+    if (!settings.ttsEnabled) return;
+
+    await _ttsService.announceTurn(
+      step.turnDirection,
+      streetName: settings.announceStreetNames ? step.streetName : null,
+      distance: settings.announceDistance ? distance : null,
+    );
+  }
+
+  // Announce immediate turn
+  Future<void> _announceImmediateTurn(RouteStep step) async {
+    final settings = SettingsService().currentSettings;
+    if (!settings.ttsEnabled) return;
+
+    await _ttsService.announceTurn(
+      step.turnDirection,
+      streetName: settings.announceStreetNames ? step.streetName : null,
+    );
   }
 
   // More precise destination checking
@@ -372,41 +421,78 @@ class NavigationMonitoringService {
       _statusController.add(_status);
       _destinationReachedController.add(position);
       _vibrationService.destinationReachedFeedback();
+
+      // TTS announcement for destination reached
+      final settings = SettingsService().currentSettings;
+      if (settings.ttsEnabled) {
+        _ttsService.announceDestinationReached();
+      }
     }
   }
 
-  // Enhanced estimates with real-time calculation
+  // Update distance and time estimates more precisely
   void _updateEstimatesPrecise(LatLng position) {
     if (_currentRoute == null) return;
 
-    // Calculate distance to destination more precisely
-    _distanceToDestination = Geolocator.distanceBetween(
+    // Calculate distance to destination
+    final distanceToDestination = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
       _currentRoute!.destination.position.latitude,
       _currentRoute!.destination.position.longitude,
-    ).round();
+    );
 
-    // Calculate remaining time based on current speed and route
+    _distanceToDestination = distanceToDestination.round();
+
+    // Calculate estimated time remaining based on current speed
     if (_currentSpeed > 0.1) {
-      // Only if we're moving
-      _estimatedTimeRemaining =
-          (_distanceToDestination! / _currentSpeed).round();
+      // Use current speed if available and reasonable
+      _estimatedTimeRemaining = (distanceToDestination / _currentSpeed).round();
     } else {
-      // Fallback to route-based estimation
-      const averageWalkingSpeed = 1.4; // m/s
-      _estimatedTimeRemaining =
-          (_distanceToDestination! / averageWalkingSpeed).round();
+      // Fallback to average walking speed (1.4 m/s)
+      _estimatedTimeRemaining = (distanceToDestination / 1.4).round();
+    }
+
+    // Find next step if route has steps
+    if (_currentRoute!.hasSteps) {
+      _nextStep = _findNextStep(position);
     }
   }
 
-  // Enhanced feedback system
+  // Find the next step in the route
+  RouteStep? _findNextStep(LatLng position) {
+    if (_currentRoute == null || !_currentRoute!.hasSteps) return null;
+
+    RouteStep? closestStep;
+    double minDistance = double.infinity;
+
+    for (final step in _currentRoute!.steps) {
+      final distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        step.startLocation.latitude,
+        step.startLocation.longitude,
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestStep = step;
+      }
+    }
+
+    return closestStep;
+  }
+
+  // Enhanced feedback system with progress announcements
   DateTime? _lastOnRouteFeedback;
   void _provideEnhancedFeedback() {
     final now = DateTime.now();
 
     // Only provide feedback if we're on route and moving
     if (!_isOnRoute || _currentSpeed < 0.2) return;
+
+    // Check for progress announcements
+    _checkProgressAnnouncement(now);
 
     // Adjust feedback frequency based on speed and situation
     int feedbackInterval = 30; // Default 30 seconds
@@ -425,7 +511,28 @@ class NavigationMonitoringService {
     }
   }
 
-  // Trigger rerouting
+  // Check if we should announce progress
+  void _checkProgressAnnouncement(DateTime now) {
+    final settings = SettingsService().currentSettings;
+    if (!settings.ttsEnabled || !settings.announceProgress) return;
+
+    final intervalMinutes = settings.progressAnnouncementInterval;
+
+    if (_lastProgressAnnouncement == null ||
+        now.difference(_lastProgressAnnouncement!).inMinutes >=
+            intervalMinutes) {
+      _lastProgressAnnouncement = now;
+
+      if (_distanceToDestination != null && _estimatedTimeRemaining != null) {
+        _ttsService.announceProgress(
+          distanceRemaining: _distanceToDestination,
+          timeRemaining: _estimatedTimeRemaining,
+        );
+      }
+    }
+  }
+
+  // Trigger rerouting with TTS announcement
   void _triggerRerouting(LatLng position, double deviation) {
     if (_status == NavigationStatus.rerouting) return; // Already rerouting
 
@@ -435,6 +542,12 @@ class NavigationMonitoringService {
 
     // Provide haptic feedback to indicate rerouting
     _vibrationService.wrongDirectionFeedback();
+
+    // TTS announcement for off route
+    final settings = SettingsService().currentSettings;
+    if (settings.ttsEnabled) {
+      _ttsService.announceOffRoute();
+    }
 
     // Get the routing service to calculate a new route
     final routingService = RoutingService();
@@ -466,6 +579,11 @@ class NavigationMonitoringService {
 
           // Provide feedback that we're back on route
           _vibrationService.newRouteFeedback();
+
+          // TTS announcement for back on route
+          if (settings.ttsEnabled) {
+            _ttsService.announceOnRoute();
+          }
 
           debugPrint('Rerouting successful - new route calculated');
         } else {
@@ -545,6 +663,11 @@ class NavigationMonitoringService {
     _distanceToDestination = null;
     _estimatedTimeRemaining = null;
     _isPaused = false; // Reset pause state
+
+    // Reset TTS announcement tracking
+    _lastProgressAnnouncement = null;
+    _lastTurnAnnouncement = null;
+    _lastAnnouncedTurn = null;
 
     _status = NavigationStatus.idle;
     _statusController.add(_status);

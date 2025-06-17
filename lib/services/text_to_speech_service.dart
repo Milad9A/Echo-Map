@@ -10,281 +10,419 @@ class TextToSpeechService {
   factory TextToSpeechService() => _instance;
   TextToSpeechService._internal();
 
-  final FlutterTts _flutterTts = FlutterTts();
+  FlutterTts? _flutterTts;
   bool _isInitialized = false;
-  bool _isSpeaking = false;
-  bool _isPaused = false;
   bool _isEnabled = true;
-  double _volume = 1.0;
-  double _pitch = 1.0;
-  double _rate = 0.5; // Default rate (normal)
+  bool _isSpeaking = false;
 
-  // Stream controllers
-  final StreamController<String> _spokenTextController =
-      StreamController<String>.broadcast();
-  final StreamController<bool> _speakingStatusController =
-      StreamController<bool>.broadcast();
+  // Default settings
+  double _volume = 0.8;
+  double _pitch = 1.0;
+  SpeechRate _speechRate = SpeechRate.normal;
+  String _language = 'en-US';
+
+  // Stream controllers for events
+  final StreamController<bool> _speakingController = StreamController<bool>.broadcast();
+  final StreamController<String> _errorController = StreamController<String>.broadcast();
 
   // Public streams
-  Stream<String> get spokenTextStream => _spokenTextController.stream;
-  Stream<bool> get speakingStatusStream => _speakingStatusController.stream;
+  Stream<bool> get speakingStream => _speakingController.stream;
+  Stream<String> get errorStream => _errorController.stream;
 
   // Getters
   bool get isInitialized => _isInitialized;
-  bool get isSpeaking => _isSpeaking;
-  bool get isPaused => _isPaused;
   bool get isEnabled => _isEnabled;
+  bool get isSpeaking => _isSpeaking;
+  double get volume => _volume;
+  double get pitch => _pitch;
+  SpeechRate get speechRate => _speechRate;
+  String get language => _language;
 
-  // Initialize the TTS engine
+  // Initialize TTS
   Future<bool> initialize() async {
     if (_isInitialized) return true;
 
     try {
-      // Configure the TTS engine
-      await _flutterTts.setVolume(_volume);
-      await _flutterTts.setPitch(_pitch);
-      await _flutterTts.setSpeechRate(_rate);
-      await _flutterTts.setLanguage('en-US');
+      _flutterTts = FlutterTts();
 
-      // Set up completion listeners
-      _flutterTts.setCompletionHandler(() {
-        _isSpeaking = false;
-        _speakingStatusController.add(false);
+      // Configure TTS settings
+      await _flutterTts!.setVolume(_volume);
+      await _flutterTts!.setPitch(_pitch);
+      await _flutterTts!.setSpeechRate(_getSpeechRateValue(_speechRate));
+      await _flutterTts!.setLanguage(_language);
+
+      // Set up event handlers
+      _flutterTts!.setStartHandler(() {
+        _isSpeaking = true;
+        _speakingController.add(true);
       });
 
-      _flutterTts.setErrorHandler((error) {
-        debugPrint('TTS Error: $error');
+      _flutterTts!.setCompletionHandler(() {
         _isSpeaking = false;
-        _speakingStatusController.add(false);
+        _speakingController.add(false);
+      });
+
+      _flutterTts!.setErrorHandler((message) {
+        _isSpeaking = false;
+        _speakingController.add(false);
+        _errorController.add(message);
+        debugPrint('TTS Error: $message');
+      });
+
+      _flutterTts!.setCancelHandler(() {
+        _isSpeaking = false;
+        _speakingController.add(false);
       });
 
       _isInitialized = true;
+      debugPrint('TTS Service initialized successfully');
       return true;
     } catch (e) {
-      debugPrint('Error initializing TTS: $e');
+      debugPrint('Failed to initialize TTS: $e');
+      _errorController.add('Failed to initialize TTS: $e');
       return false;
     }
   }
 
-  // Speak a given text
-  Future<bool> speak(String text) async {
-    if (!_isEnabled) return false;
-    if (!_isInitialized) await initialize();
+  // Speak text
+  Future<void> speak(String text) async {
+    if (!_isInitialized || !_isEnabled || text.trim().isEmpty) {
+      return;
+    }
 
     try {
-      // Stop any ongoing speech
-      if (_isSpeaking) {
-        await stop();
-      }
+      // Stop any current speech
+      await stop();
 
-      _isSpeaking = true;
-      _isPaused = false;
-      _speakingStatusController.add(true);
-      _spokenTextController.add(text);
+      // Clean the text for better speech
+      final cleanText = _cleanTextForSpeech(text);
 
-      await _flutterTts.speak(text);
-      return true;
+      debugPrint('TTS Speaking: $cleanText');
+      await _flutterTts!.speak(cleanText);
     } catch (e) {
       debugPrint('Error speaking text: $e');
-      _isSpeaking = false;
-      _speakingStatusController.add(false);
-      return false;
+      _errorController.add('Error speaking text: $e');
     }
   }
 
-  // Stop speaking
-  Future<bool> stop() async {
-    if (!_isInitialized) return false;
+  // Stop current speech
+  Future<void> stop() async {
+    if (!_isInitialized) return;
 
     try {
-      await _flutterTts.stop();
+      await _flutterTts!.stop();
       _isSpeaking = false;
-      _isPaused = false;
-      _speakingStatusController.add(false);
-      return true;
+      _speakingController.add(false);
     } catch (e) {
       debugPrint('Error stopping TTS: $e');
-      return false;
     }
   }
 
-  // Pause speaking
-  Future<bool> pause() async {
-    if (!_isInitialized || !_isSpeaking || _isPaused) return false;
+  // Pause speech (if supported)
+  Future<void> pause() async {
+    if (!_isInitialized) return;
 
     try {
-      // Check if pause is supported on the platform
-      final available = await _flutterTts.pause();
-      if (available == 1) {
-        _isPaused = true;
-        _speakingStatusController.add(false);
-        return true;
-      } else {
-        // If pause is not supported, just stop
-        return await stop();
-      }
+      await _flutterTts!.pause();
     } catch (e) {
       debugPrint('Error pausing TTS: $e');
-      return false;
     }
   }
 
-  // Set speech volume (0.0 to 1.0)
-  Future<bool> setVolume(double volume) async {
-    if (volume < 0.0 || volume > 1.0) return false;
+  // Set volume (0.0 to 1.0)
+  Future<void> setVolume(double volume) async {
+    _volume = volume.clamp(0.0, 1.0);
 
-    _volume = volume;
     if (_isInitialized) {
-      await _flutterTts.setVolume(volume);
+      try {
+        await _flutterTts!.setVolume(_volume);
+      } catch (e) {
+        debugPrint('Error setting TTS volume: $e');
+      }
     }
-    return true;
   }
 
-  // Set speech pitch (0.5 to 2.0)
-  Future<bool> setPitch(double pitch) async {
-    if (pitch < 0.5 || pitch > 2.0) return false;
+  // Set pitch (0.5 to 2.0, 1.0 is normal)
+  Future<void> setPitch(double pitch) async {
+    _pitch = pitch.clamp(0.5, 2.0);
 
-    _pitch = pitch;
     if (_isInitialized) {
-      await _flutterTts.setPitch(pitch);
+      try {
+        await _flutterTts!.setPitch(_pitch);
+      } catch (e) {
+        debugPrint('Error setting TTS pitch: $e');
+      }
     }
-    return true;
   }
 
-  // Set speech rate using predefined rates
-  Future<bool> setSpeechRate(SpeechRate rate) async {
-    double numericRate;
+  // Set speech rate
+  Future<void> setSpeechRate(SpeechRate rate) async {
+    _speechRate = rate;
 
-    switch (rate) {
-      case SpeechRate.slow:
-        numericRate = 0.3;
-        break;
-      case SpeechRate.normal:
-        numericRate = 0.5;
-        break;
-      case SpeechRate.fast:
-        numericRate = 0.7;
-        break;
-    }
-
-    _rate = numericRate;
     if (_isInitialized) {
-      await _flutterTts.setSpeechRate(numericRate);
+      try {
+        await _flutterTts!.setSpeechRate(_getSpeechRateValue(rate));
+      } catch (e) {
+        debugPrint('Error setting TTS speech rate: $e');
+      }
     }
-    return true;
   }
 
-  // Enable or disable speech
+  // Set language
+  Future<void> setLanguage(String language) async {
+    _language = language;
+
+    if (_isInitialized) {
+      try {
+        await _flutterTts!.setLanguage(_language);
+      } catch (e) {
+        debugPrint('Error setting TTS language: $e');
+      }
+    }
+  }
+
+  // Enable/disable TTS
   void setEnabled(bool enabled) {
     _isEnabled = enabled;
+
     if (!enabled && _isSpeaking) {
       stop();
     }
   }
 
-  // Format navigation step for speech
-  String formatNavigationStep(String instruction, int? distance) {
-    if (distance == null) {
-      return instruction;
-    }
+  // Get available languages
+  Future<List<String>> getAvailableLanguages() async {
+    if (!_isInitialized) return [];
 
-    String distanceText;
-    if (distance < 100) {
-      distanceText = 'In $distance meters';
-    } else if (distance < 1000) {
-      distanceText = 'In ${(distance / 100).floor() * 100} meters';
-    } else {
-      final km = distance / 1000.0;
-      distanceText = 'In ${km.toStringAsFixed(1)} kilometers';
+    try {
+      final languages = await _flutterTts!.getLanguages;
+      return List<String>.from(languages ?? []);
+    } catch (e) {
+      debugPrint('Error getting available languages: $e');
+      return [];
     }
-
-    return '$distanceText, $instruction';
   }
 
-  // Speak turn direction with distance
-  Future<bool> speakTurn(String turnDirection, int? distance) {
-    String instruction;
+  // Check if TTS is available
+  Future<bool> isAvailable() async {
+    try {
+      if (!_isInitialized) {
+        await initialize();
+      }
+      return _isInitialized;
+    } catch (e) {
+      return false;
+    }
+  }
 
-    switch (turnDirection.toLowerCase()) {
+  // Navigation-specific announcements
+  Future<void> announceNavigation(String destination) async {
+    await speak('Starting navigation to $destination');
+  }
+
+  Future<void> announceTurn(String direction, {String? streetName, int? distance}) async {
+    String announcement = '';
+
+    if (distance != null && distance > 0) {
+      if (distance < 100) {
+        announcement = 'In $distance meters, ';
+      } else {
+        final distanceText = distance < 1000
+            ? '$distance meters'
+            : '${(distance / 1000).toStringAsFixed(1)} kilometers';
+        announcement = 'In $distanceText, ';
+      }
+    }
+
+    switch (direction.toLowerCase()) {
       case 'left':
-        instruction = 'Turn left';
+      case 'slight_left':
+        announcement += direction.contains('slight') ? 'turn slightly left' : 'turn left';
         break;
       case 'right':
-        instruction = 'Turn right';
+      case 'slight_right':
+        announcement += direction.contains('slight') ? 'turn slightly right' : 'turn right';
         break;
-      case 'slight left':
-        instruction = 'Turn slightly left';
+      case 'sharp_left':
+        announcement += 'make a sharp left turn';
         break;
-      case 'slight right':
-        instruction = 'Turn slightly right';
-        break;
-      case 'sharp left':
-        instruction = 'Make a sharp left turn';
-        break;
-      case 'sharp right':
-        instruction = 'Make a sharp right turn';
+      case 'sharp_right':
+        announcement += 'make a sharp right turn';
         break;
       case 'uturn':
-        instruction = 'Make a U-turn';
+        announcement += 'make a U-turn';
         break;
       case 'straight':
-        instruction = 'Continue straight';
+      case 'continue':
+        announcement += 'continue straight';
+        break;
+      case 'merge':
+        announcement += 'merge';
+        break;
+      case 'exit':
+        announcement += 'take the exit';
         break;
       default:
-        instruction = 'Take the $turnDirection';
+        announcement += 'turn $direction';
     }
 
-    return speak(formatNavigationStep(instruction, distance));
-  }
-
-  // Speak crossing alert
-  Future<bool> speakCrossing(String crossingType, int? distance) {
-    String instruction = 'Street crossing ahead';
-
-    if (crossingType.toLowerCase().contains('traffic light')) {
-      instruction = 'Traffic light crossing ahead';
-    } else if (crossingType.toLowerCase().contains('zebra')) {
-      instruction = 'Zebra crossing ahead';
+    if (streetName != null && streetName.isNotEmpty) {
+      announcement += ' onto $streetName';
     }
 
-    return speak(formatNavigationStep(instruction, distance));
+    await speak(announcement);
   }
 
-  // Speak hazard warning
-  Future<bool> speakHazard(String hazardType, int? distance) {
-    String instruction = 'Caution, hazard ahead';
+  Future<void> announceDestinationReached() async {
+    await speak('Destination reached. You have arrived.');
+  }
+
+  Future<void> announceOffRoute() async {
+    await speak('You are off route. Recalculating.');
+  }
+
+  Future<void> announceOnRoute() async {
+    await speak('Back on route.');
+  }
+
+  Future<void> announceCrossing({String? streetName, String? crossingType}) async {
+    String announcement = 'Street crossing ahead';
+
+    if (crossingType != null) {
+      switch (crossingType.toLowerCase()) {
+        case 'traffic_light':
+          announcement = 'Traffic light crossing ahead';
+          break;
+        case 'zebra':
+          announcement = 'Zebra crossing ahead';
+          break;
+        case 'uncontrolled':
+          announcement = 'Uncontrolled crossing ahead';
+          break;
+      }
+    }
+
+    if (streetName != null && streetName.isNotEmpty) {
+      announcement += ' on $streetName';
+    }
+
+    await speak(announcement);
+  }
+
+  Future<void> announceHazard(String hazardType, {String? description}) async {
+    String announcement = 'Caution, ';
 
     switch (hazardType.toLowerCase()) {
       case 'construction':
-        instruction = 'Caution, construction ahead';
+        announcement += 'construction ahead';
         break;
       case 'obstacle':
-        instruction = 'Caution, obstacle ahead';
+        announcement += 'obstacle on path';
         break;
-      case 'pothole':
-        instruction = 'Caution, pothole ahead';
+      case 'wet_surface':
+        announcement += 'wet surface ahead';
+        break;
+      case 'narrow_path':
+        announcement += 'narrow path ahead';
+        break;
+      case 'steep_incline':
+        announcement += 'steep incline ahead';
+        break;
+      case 'poor_lighting':
+        announcement += 'poor lighting ahead';
         break;
       default:
-        instruction = 'Caution, $hazardType ahead';
+        announcement += 'hazard ahead';
     }
 
-    return speak(formatNavigationStep(instruction, distance));
+    if (description != null && description.isNotEmpty) {
+      announcement += '. $description';
+    }
+
+    await speak(announcement);
   }
 
-  // Speak destination reached
-  Future<bool> speakDestinationReached(String destinationName) {
-    return speak('You have reached your destination, $destinationName');
+  Future<void> announceEmergency(String emergencyType, String action) async {
+    String announcement = 'Emergency: ';
+
+    switch (action.toLowerCase()) {
+      case 'stop':
+        announcement += 'Navigation stopped due to emergency';
+        break;
+      case 'reroute':
+        announcement += 'Emergency reroute in progress';
+        break;
+      case 'detour':
+        announcement += 'Creating emergency detour';
+        break;
+      case 'pause':
+        announcement += 'Navigation paused for safety';
+        break;
+      default:
+        announcement += 'Emergency situation detected';
+    }
+
+    await speak(announcement);
   }
 
-  // Speak navigation status
-  Future<bool> speakNavigationStatus(String status) {
-    return speak(status);
+  Future<void> announceProgress({int? distanceRemaining, int? timeRemaining}) async {
+    if (distanceRemaining == null && timeRemaining == null) return;
+
+    String announcement = '';
+
+    if (distanceRemaining != null) {
+      if (distanceRemaining < 1000) {
+        announcement = '$distanceRemaining meters remaining';
+      } else {
+        final km = (distanceRemaining / 1000.0).toStringAsFixed(1);
+        announcement = '$km kilometers remaining';
+      }
+    }
+
+    if (timeRemaining != null) {
+      final minutes = (timeRemaining / 60).round();
+      final timeText = minutes < 60
+          ? '$minutes minutes'
+          : '${minutes ~/ 60} hours and ${minutes % 60} minutes';
+
+      if (announcement.isNotEmpty) {
+        announcement += ', approximately $timeText';
+      } else {
+        announcement = 'Approximately $timeText remaining';
+      }
+    }
+
+    await speak(announcement);
+  }
+
+  // Convert speech rate enum to flutter_tts value
+  double _getSpeechRateValue(SpeechRate rate) {
+    switch (rate) {
+      case SpeechRate.slow:
+        return 0.4;
+      case SpeechRate.normal:
+        return 0.6;
+      case SpeechRate.fast:
+        return 0.8;
+    }
+  }
+
+  // Clean text for better speech output
+  String _cleanTextForSpeech(String text) {
+    return text
+        .replaceAll(RegExp(r'<[^>]*>'), '') // Remove HTML tags
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', 'and')
+        .replaceAll(RegExp(r'\s+'), ' ') // Multiple spaces to single space
+        .trim();
   }
 
   // Dispose resources
   void dispose() {
     stop();
-    _spokenTextController.close();
-    _speakingStatusController.close();
+    _speakingController.close();
+    _errorController.close();
+    _flutterTts = null;
+    _isInitialized = false;
   }
 }

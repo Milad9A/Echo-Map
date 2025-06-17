@@ -2,7 +2,7 @@ import 'package:echo_map/services/text_to_speech_service.dart';
 import 'package:flutter/material.dart';
 import '../../services/vibration_service.dart';
 import '../../services/settings_service.dart';
-import '../../utils/theme_config.dart';
+import '../../utils/theme_config.dart' hide AppThemeMode;
 import 'widgets/section_header.dart';
 import 'widgets/settings_item.dart';
 import 'widgets/vibration_intensity_setting.dart';

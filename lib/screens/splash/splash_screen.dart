@@ -8,6 +8,8 @@ import '../../services/recent_places_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../blocs/location/location_bloc.dart';
 import '../../blocs/location/location_event.dart';
+import '../../services/text_to_speech_service.dart';
+import '../../services/location_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -32,6 +34,8 @@ class _SplashScreenState extends State<SplashScreen>
   final SettingsService _settingsService = SettingsService();
   final RecentPlacesService _recentPlacesService = RecentPlacesService();
   final GeocodingService _geocodingService = GeocodingService();
+  final TextToSpeechService _ttsService = TextToSpeechService();
+  final LocationService _locationService = LocationService();
 
   String _currentStatus = 'Starting EchoMap...';
   bool _initializationComplete = false;
@@ -156,6 +160,14 @@ class _SplashScreenState extends State<SplashScreen>
       await _updateStatus('Loading your favorite places...', 200);
       await _recentPlacesService.initialize();
 
+      // Initialize Text-to-Speech service - reduced delay
+      await _updateStatus('Setting up voice feedback...', 200);
+      await _ttsService.initialize();
+
+      // Initialize Location service - reduced delay
+      await _updateStatus('Preparing location services...', 200);
+      await _locationService.initialize();
+
       // Final setup - reduced delay
       await _updateStatus('Finalizing setup...', 150);
 
@@ -179,25 +191,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacementNamed('/home');
       }
     } catch (e) {
-      await _updateStatus('Setup encountered an issue', 200);
-
-      // Error feedback
-      final hasVibrator = await _vibrationService.hasVibrator();
-      if (hasVibrator) {
-        // Error pattern: long-short-long
-        await _vibrationService.simpleVibrate(duration: 200);
-        await Future.delayed(const Duration(milliseconds: 100));
-        await _vibrationService.simpleVibrate(duration: 100);
-        await Future.delayed(const Duration(milliseconds: 100));
-        await _vibrationService.simpleVibrate(duration: 200);
-      }
-
-      await _updateStatus('Continuing anyway...', 200);
-
-      // Continue to app even if there were initialization errors
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
+      await _handleInitializationError(e);
     }
   }
 
@@ -208,6 +202,23 @@ class _SplashScreenState extends State<SplashScreen>
       });
     }
     await Future.delayed(Duration(milliseconds: delayMs));
+  }
+
+  Future<void> _handleInitializationError(dynamic error) async {
+    debugPrint('Initialization error: $error');
+
+    if (mounted) {
+      setState(() {
+        _currentStatus = 'Initialization failed';
+      });
+
+      // Try to provide vibration feedback if possible
+      try {
+        await _vibrationService.simpleVibrate(duration: 300);
+      } catch (e) {
+        debugPrint('Could not provide error vibration: $e');
+      }
+    }
   }
 
   @override

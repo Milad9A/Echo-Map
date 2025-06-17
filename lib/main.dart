@@ -18,7 +18,7 @@ import 'services/geocoding_service.dart';
 import 'services/recent_places_service.dart';
 import 'services/settings_service.dart';
 import 'utils/platform_config.dart';
-import 'utils/theme_config.dart';
+import 'utils/theme_config.dart' hide AppThemeMode;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
