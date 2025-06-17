@@ -8,6 +8,7 @@ import '../models/hazard.dart';
 import '../services/emergency_service.dart';
 import '../services/vibration_service.dart';
 import '../services/routing_service.dart';
+import '../services/text_to_speech_service.dart'; // Add this import
 
 enum NavigationStatus {
   idle,
@@ -23,6 +24,10 @@ class NavigationMonitoringService {
       NavigationMonitoringService._internal();
   factory NavigationMonitoringService() => _instance;
   NavigationMonitoringService._internal();
+
+  // Add text-to-speech service
+  final TextToSpeechService _ttsService = TextToSpeechService();
+  final VibrationService _vibrationService = VibrationService();
 
   // Stream controllers
   final _statusController = StreamController<NavigationStatus>.broadcast();
@@ -70,9 +75,6 @@ class NavigationMonitoringService {
   // Services (these would be injected in a real implementation)
   StreamSubscription<Position>? _locationSubscription;
 
-  // Add vibration service
-  final VibrationService _vibrationService = VibrationService();
-
   // Add more precise tracking variables
   DateTime? _lastPositionUpdate;
   LatLng? _previousPosition;
@@ -91,12 +93,28 @@ class NavigationMonitoringService {
   int? get estimatedTimeRemaining => _estimatedTimeRemaining;
   RouteStep? get nextStep => _nextStep;
 
-  // Start navigation monitoring
+  // Initialize the navigation monitoring service
+  Future<bool> initialize() async {
+    try {
+      // Initialize text-to-speech service
+      await _ttsService.initialize();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error initializing navigation monitoring: $e');
+      return false;
+    }
+  }
+
+  // Start navigation with a given route
   Future<bool> startNavigation(RouteInformation route) async {
     try {
       _currentRoute = route;
       _status = NavigationStatus.active;
       _statusController.add(_status);
+
+      // Announce start of navigation with text-to-speech
+      _ttsService.speak('Starting navigation to ${route.destination.name}');
 
       // Start location updates
       await _startLocationTracking();

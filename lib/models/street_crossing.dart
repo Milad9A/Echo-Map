@@ -170,15 +170,15 @@ class StreetCrossing extends Equatable {
 
   @override
   List<Object?> get props => [
-    id,
-    position.latitude,
-    position.longitude,
-    type,
-    hasAudibleSignal,
-    hasTactilePaving,
-    streetWidth,
-    estimatedCrossingTime,
-    streetName,
-    trafficLevel,
-  ];
+        id,
+        position.latitude,
+        position.longitude,
+        type,
+        hasAudibleSignal,
+        hasTactilePaving,
+        streetWidth,
+        estimatedCrossingTime,
+        streetName,
+        trafficLevel,
+      ];
 }

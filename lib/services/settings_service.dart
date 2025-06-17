@@ -12,6 +12,12 @@ class SettingsData {
   final bool enableVoiceCommands;
   final AppThemeMode themeMode;
 
+  // Add text-to-speech settings
+  final bool ttsEnabled;
+  final double ttsVolume;
+  final double ttsPitch;
+  final String ttsRate; // 'slow', 'normal', 'fast'
+
   const SettingsData({
     this.highContrastMode = false,
     this.largeFontSize = false,
@@ -20,6 +26,10 @@ class SettingsData {
     this.speakInstructions = true,
     this.enableVoiceCommands = true,
     this.themeMode = AppThemeMode.system,
+    this.ttsEnabled = true,
+    this.ttsVolume = 1.0,
+    this.ttsPitch = 1.0,
+    this.ttsRate = 'normal',
   });
 
   SettingsData copyWith({
@@ -30,6 +40,10 @@ class SettingsData {
     bool? speakInstructions,
     bool? enableVoiceCommands,
     AppThemeMode? themeMode,
+    bool? ttsEnabled,
+    double? ttsVolume,
+    double? ttsPitch,
+    String? ttsRate,
   }) {
     return SettingsData(
       highContrastMode: highContrastMode ?? this.highContrastMode,
@@ -39,6 +53,10 @@ class SettingsData {
       speakInstructions: speakInstructions ?? this.speakInstructions,
       enableVoiceCommands: enableVoiceCommands ?? this.enableVoiceCommands,
       themeMode: themeMode ?? this.themeMode,
+      ttsEnabled: ttsEnabled ?? this.ttsEnabled,
+      ttsVolume: ttsVolume ?? this.ttsVolume,
+      ttsPitch: ttsPitch ?? this.ttsPitch,
+      ttsRate: ttsRate ?? this.ttsRate,
     );
   }
 
@@ -51,6 +69,10 @@ class SettingsData {
       'speakInstructions': speakInstructions,
       'enableVoiceCommands': enableVoiceCommands,
       'themeMode': themeMode.index,
+      'ttsEnabled': ttsEnabled,
+      'ttsVolume': ttsVolume,
+      'ttsPitch': ttsPitch,
+      'ttsRate': ttsRate,
     };
   }
 
@@ -64,6 +86,10 @@ class SettingsData {
       enableVoiceCommands: json['enableVoiceCommands'] ?? true,
       themeMode:
           AppThemeMode.values[json['themeMode'] ?? AppThemeMode.system.index],
+      ttsEnabled: json['ttsEnabled'] ?? true,
+      ttsVolume: (json['ttsVolume'] ?? 1.0).toDouble(),
+      ttsPitch: (json['ttsPitch'] ?? 1.0).toDouble(),
+      ttsRate: json['ttsRate'] ?? 'normal',
     );
   }
 }
@@ -176,6 +202,30 @@ class SettingsService {
     await _saveSettings();
     _settingsController.add(_currentSettings);
     debugPrint('Theme mode set to: ${themeMode.displayName}');
+  }
+
+  Future<void> setTtsEnabled(bool enabled) async {
+    _currentSettings = _currentSettings.copyWith(ttsEnabled: enabled);
+    await _saveSettings();
+    _settingsController.add(_currentSettings);
+  }
+
+  Future<void> setTtsVolume(double volume) async {
+    _currentSettings = _currentSettings.copyWith(ttsVolume: volume);
+    await _saveSettings();
+    _settingsController.add(_currentSettings);
+  }
+
+  Future<void> setTtsPitch(double pitch) async {
+    _currentSettings = _currentSettings.copyWith(ttsPitch: pitch);
+    await _saveSettings();
+    _settingsController.add(_currentSettings);
+  }
+
+  Future<void> setTtsRate(String rate) async {
+    _currentSettings = _currentSettings.copyWith(ttsRate: rate);
+    await _saveSettings();
+    _settingsController.add(_currentSettings);
   }
 
   Future<void> resetToDefaults() async {

@@ -1,3 +1,4 @@
+import 'package:echo_map/services/text_to_speech_service.dart';
 import 'package:flutter/material.dart';
 import '../../services/vibration_service.dart';
 import '../../services/settings_service.dart';
@@ -167,21 +168,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SectionHeader(title: 'Voice & Audio'),
 
                   SettingsItem(
-                    title: 'Speak Instructions',
-                    subtitle: 'Read navigation instructions aloud',
-                    value: _currentSettings.speakInstructions,
+                    title: 'Speak Navigation Steps',
+                    subtitle: 'Read directions aloud during navigation',
+                    value: _currentSettings.ttsEnabled,
                     onChanged: (value) {
-                      _settingsService.setSpeakInstructions(value);
+                      _settingsService.setTtsEnabled(value);
                     },
                   ),
 
-                  SettingsItem(
-                    title: 'Voice Commands',
-                    subtitle: 'Control the app with your voice',
-                    value: _currentSettings.enableVoiceCommands,
-                    onChanged: (value) {
-                      _settingsService.setEnableVoiceCommands(value);
-                    },
+                  // Speech rate dropdown
+                  ListTile(
+                    title: const Text('Speech Rate'),
+                    subtitle: const Text('How fast the voice speaks'),
+                    trailing: DropdownButton<String>(
+                      value: _currentSettings.ttsRate,
+                      onChanged: _currentSettings.ttsEnabled
+                          ? (String? newValue) async {
+                              if (newValue != null) {
+                                _settingsService.setTtsRate(newValue);
+                              }
+                            }
+                          : null,
+                      items: ['slow', 'normal', 'fast']
+                          .map<DropdownMenuItem<String>>((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child:
+                              Text(value[0].toUpperCase() + value.substring(1)),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  // Speech volume slider
+                  ListTile(
+                    title: const Text('Speech Volume'),
+                    subtitle: Slider(
+                      value: _currentSettings.ttsVolume,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 10,
+                      label:
+                          (_currentSettings.ttsVolume * 100).round().toString(),
+                      onChanged: _currentSettings.ttsEnabled
+                          ? (double value) {
+                              _settingsService.setTtsVolume(value);
+                            }
+                          : null,
+                    ),
+                    trailing: Icon(
+                      _currentSettings.ttsVolume > 0.5
+                          ? Icons.volume_up
+                          : _currentSettings.ttsVolume > 0.0
+                              ? Icons.volume_down
+                              : Icons.volume_off,
+                    ),
+                  ),
+
+                  // Test voice button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: ElevatedButton(
+                      onPressed: _currentSettings.ttsEnabled
+                          ? () {
+                              final tts = TextToSpeechService();
+                              tts.initialize().then((_) {
+                                tts.setVolume(_currentSettings.ttsVolume);
+                                tts.setPitch(_currentSettings.ttsPitch);
+
+                                SpeechRate rate;
+                                switch (_currentSettings.ttsRate) {
+                                  case 'slow':
+                                    rate = SpeechRate.slow;
+                                    break;
+                                  case 'fast':
+                                    rate = SpeechRate.fast;
+                                    break;
+                                  default:
+                                    rate = SpeechRate.normal;
+                                }
+                                tts.setSpeechRate(rate);
+
+                                tts.speak(
+                                    "This is how navigation instructions will sound");
+                              });
+                            }
+                          : null,
+                      child: const Text('Test Voice Output'),
+                    ),
                   ),
 
                   const Divider(),

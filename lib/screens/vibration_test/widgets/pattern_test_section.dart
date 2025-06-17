@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../services/vibration_service.dart';
+import '../../../services/text_to_speech_service.dart';
 
 class PatternTestSection extends StatelessWidget {
   final VibrationService vibrationService;
   final int intensity;
+  final TextToSpeechService _ttsService = TextToSpeechService();
 
-  const PatternTestSection({
+  PatternTestSection({
     super.key,
     required this.vibrationService,
     required this.intensity,
@@ -40,10 +42,13 @@ class PatternTestSection extends StatelessWidget {
               mainAxisSpacing: 8,
               children: VibrationService.patterns.keys.map((patternName) {
                 return ElevatedButton(
-                  onPressed: () => vibrationService.playPattern(
-                    patternName,
-                    intensity: intensity,
-                  ),
+                  onPressed: () {
+                    vibrationService.playPattern(
+                      patternName,
+                      intensity: intensity,
+                    );
+                    _speakPatternDescription(patternName);
+                  },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
@@ -136,5 +141,12 @@ class PatternTestSection extends StatelessWidget {
       default:
         return 'Navigation feedback pattern';
     }
+  }
+
+  // Add a method to read the pattern description aloud
+  void _speakPatternDescription(String patternName) {
+    _ttsService.initialize().then((_) {
+      _ttsService.speak(_getPatternDescription(patternName));
+    });
   }
 }
