@@ -160,12 +160,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             child: const Icon(Icons.search),
           ),
           const SizedBox(height: 16),
-          // Test route button (for development)
           FloatingActionButton(
-            heroTag: 'testRoute',
-            onPressed: _selectedDestination != null
-                ? _calculateRouteToDestination
-                : _calculateTestRoute,
+            heroTag: 'calculateRoute',
+            onPressed: () {
+              if (_selectedDestination == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select a destination first.'),
+                  ),
+                );
+              } else {
+                _calculateRouteToDestination();
+              }
+            },
             child: const Icon(Icons.route),
           ),
           const SizedBox(height: 16),
@@ -515,18 +522,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
       // Center map on the destination
       _mappingService.animateCameraToPosition(result.position, zoom: 15);
-
-      // Show a snackbar
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Destination set: ${result.name}'),
-          action: SnackBarAction(
-            label: 'Calculate Route',
-            onPressed: _calculateRouteToDestination,
-          ),
-        ),
-      );
     }
   }
 
@@ -608,82 +603,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
-    }
-  }
-
-  // Calculate a test route (for development purposes)
-  Future<void> _calculateTestRoute() async {
-    setState(() => _isLoading = true);
-
-    try {
-      // Get current position
-      Position? position;
-      final locationBlocState = context.read<LocationBloc>().state;
-
-      if (locationBlocState is LocationTracking) {
-        position = locationBlocState.currentPosition;
-      } else {
-        position = await Geolocator.getCurrentPosition();
-      }
-
-      // Create origin from current position
-      final origin = LatLng(position.latitude, position.longitude);
-
-      // Create a destination 1km to the north and east (for testing)
-      final destination = LatLng(
-        position.latitude + 0.01, // ~1km north
-        position.longitude + 0.01, // ~1km east
-      );
-
-      // Calculate route
-      final route = await _routingService.calculateRoute(
-        origin,
-        destination,
-        mode: TravelMode.walking,
-      );
-
-      if (route == null) {
-        throw Exception('Could not calculate route');
-      }
-
-      if (!mounted) return;
-
-      // Update state with new route
-      setState(() {
-        _currentRoute = route;
-        _errorMessage = null;
-        _isLoading = false;
-      });
-
-      // Add markers for origin and destination
-      _mappingService.clearMarkers();
-      _mappingService.addMarker(
-        id: 'origin',
-        position: origin,
-        title: 'Starting Point',
-      );
-      _mappingService.addMarker(
-        id: 'destination',
-        position: destination,
-        title: 'Destination',
-      );
-
-      // Add polyline for the route
-      _mappingService.clearPolylines();
-      _mappingService.addPolyline(id: 'route', points: route.polylinePoints);
-
-      // Give the map some time to process the updates before fitting the route
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Show the entire route
-      _fitRouteOnMap(route.polylinePoints);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString();
-          _isLoading = false;
-        });
       }
     }
   }

@@ -356,8 +356,6 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
           destination: currentState.destination,
           currentPosition: currentState.currentPosition,
           route: currentState.route,
-          nextStep: currentState.nextStep,
-          distanceToDestination: currentState.distanceToDestination,
           estimatedTimeInSeconds: currentState.estimatedTimeInSeconds,
         ),
       );
@@ -377,14 +375,11 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       // Resume the navigation service
       await _navigationService.resumeNavigation();
 
-      // Emit active state
       emit(
         NavigationActive(
           destination: currentState.destination,
           currentPosition: currentState.currentPosition,
           route: currentState.route,
-          nextStep: currentState.nextStep,
-          distanceToDestination: currentState.distanceToDestination,
           estimatedTimeInSeconds: currentState.estimatedTimeInSeconds,
           isOnRoute: _navigationService.isOnRoute,
         ),
@@ -410,11 +405,28 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
       }
 
       // Update state with new position and info
+      int? newEta = _navigationService.estimatedTimeRemaining;
+
+      // Smooth random changes in ETA
+      if (currentState.estimatedTimeInSeconds != null && newEta != null) {
+        final alpha = 0.7;
+        newEta = (alpha * currentState.estimatedTimeInSeconds! +
+                (1 - alpha) * newEta)
+            .round();
+      }
+      if (newEta != null && currentState.estimatedTimeInSeconds != null) {
+        final oldEta = currentState.estimatedTimeInSeconds!;
+        final diff = (newEta - oldEta).abs();
+        // Clamp if difference > 3 minutes
+        if (diff > 180) {
+          newEta = ((oldEta + newEta) / 2).round();
+        }
+      }
       emit(
         currentState.copyWith(
           currentPosition: event.position,
           distanceToDestination: remainingDistance,
-          estimatedTimeInSeconds: _navigationService.estimatedTimeRemaining,
+          estimatedTimeInSeconds: newEta,
           isOnRoute: _navigationService.isOnRoute,
           nextStep: _navigationService.nextStep,
           lastUpdated: DateTime.now(),
@@ -851,6 +863,7 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
   }
 
   @override
+  @override
   Future<void> close() {
     // Clean up subscriptions
     _statusSubscription?.cancel();
@@ -863,10 +876,6 @@ class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
     _crossingSubscription?.cancel();
     _hazardSubscription?.cancel();
     _emergencySubscription?.cancel();
-
-    // Stop navigation
-    _navigationService.stopNavigation();
-
     return super.close();
   }
 }

@@ -43,39 +43,6 @@ class CrossingDetectionService {
   StreetCrossing? get approachingCrossing => _approachingCrossing;
   List<StreetCrossing> get knownCrossings => List.unmodifiable(_knownCrossings);
 
-  // Initialize with predefined crossings or load from storage
-  Future<void> initialize() async {
-    // In a real app, we would load known crossings from a database or API
-    // For now, just make sure the vibration service is initialized
-    await _vibrationService.initialize();
-
-    // Example of adding a test crossing (would be removed in production)
-    _addTestCrossings();
-  }
-
-  // Add test crossings for development purposes
-  void _addTestCrossings() {
-    // This would be replaced with real data in production
-    _knownCrossings.add(
-      StreetCrossing(
-        id: '1',
-        position: const LatLng(53.0793, 8.8027), // Example coordinates
-        type: CrossingType.trafficLight,
-        hasAudibleSignal: true,
-        streetName: 'Main Street',
-      ),
-    );
-
-    _knownCrossings.add(
-      StreetCrossing(
-        id: '2',
-        position: const LatLng(53.0803, 8.8037), // Example coordinates
-        type: CrossingType.zebra,
-        streetName: 'Oak Avenue',
-      ),
-    );
-  }
-
   // Start monitoring for crossings along a route
   Future<bool> startMonitoring({RouteInformation? route}) async {
     if (_isMonitoring) return true;
@@ -154,9 +121,8 @@ class CrossingDetectionService {
   void _checkWarningThresholds(StreetCrossing crossing, double distance) {
     // Skip if we've warned recently
     if (_lastWarningTime != null) {
-      final timeSinceLastWarning = DateTime.now()
-          .difference(_lastWarningTime!)
-          .inSeconds;
+      final timeSinceLastWarning =
+          DateTime.now().difference(_lastWarningTime!).inSeconds;
       if (timeSinceLastWarning < _minTimeBetweenWarnings) return;
     }
 

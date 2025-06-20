@@ -1,6 +1,9 @@
+import 'dart:core';
+
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../models/route_information.dart';
+
+import 'package:echo_map/models/route_information.dart';
 
 abstract class NavigationState extends Equatable {
   const NavigationState();

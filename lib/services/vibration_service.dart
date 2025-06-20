@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:vibration/vibration.dart';
 import 'settings_service.dart';
 import 'text_to_speech_service.dart';
@@ -11,26 +13,131 @@ class VibrationService {
   final SettingsService _settingsService = SettingsService();
   final TextToSpeechService _ttsService = TextToSpeechService();
 
+  // Platform detection
+  static final bool _isIOS = Platform.isIOS;
+
   // Intensity levels
   static const int lowIntensity = 50;
   static const int mediumIntensity = 128;
   static const int highIntensity = 255;
 
-  // Vibration patterns (duration in milliseconds)
-  static const Map<String, List<int>> patterns = {
-    'onRoute': [100, 50, 100],
-    'approachingTurn': [200, 100, 400],
-    'leftTurn': [300, 100, 100, 100, 100],
-    'rightTurn': [100, 100, 100, 100, 300],
-    'wrongDirection': [500, 200, 500],
-    'destinationReached': [200, 100, 200, 100, 200],
-    'crossingStreet': [150, 100, 150, 300],
-    'hazardWarning': [100, 50, 100, 50, 100],
+  // Unified vibration patterns (duration in milliseconds) - [vibration, pause, vibration, pause, ...]
+  static const Map<String, List<int>> _vibrationPatterns = {
+    'onRoute': [400], // Single medium vibration
+
+    'approachingTurn': [
+      200,
+      300,
+      200,
+      300,
+      200,
+      500,
+      600,
+      300,
+      400
+    ], // Building rhythm: short-short-short-long-LONGER
+
+    'leftTurn': [
+      100,
+      200,
+      100,
+      200,
+      100,
+      200,
+      100,
+      200,
+      100,
+      300,
+      1200
+    ], // "tap-tap-tap-tap-tap-LOOOOOOONG" - builds up to climax
+
+    'rightTurn': [
+      1200,
+      1200,
+      100,
+      300,
+      100,
+      300,
+      100,
+      300,
+      100,
+      300,
+      100,
+      300,
+      100
+    ], // "LOOOOOOONG-pause-tap-pause-tap-pause-tap-pause-tap-pause-tap" - starts strong, then clear details
+
+    'wrongDirection': [
+      250,
+      150,
+      250,
+      150,
+      250,
+      800,
+      250,
+      150,
+      250,
+      150,
+      250,
+      800,
+      400,
+      200,
+      400
+    ], // Double urgent pattern with finale
+
+    'destinationReached': [
+      300,
+      200,
+      400,
+      200,
+      500,
+      200,
+      600,
+      200,
+      700,
+      300,
+      200,
+      300,
+      200,
+      300,
+      800
+    ], // Celebration: ascending crescendo with finale
+
+    'crossingStreet': [
+      500,
+      1000,
+      500,
+      1000,
+      500,
+      1000,
+      500,
+      500,
+      200
+    ], // Slow deliberate warning pattern
+
+    'hazardWarning': [
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      400,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      800,
+      300
+    ], // Rapid fire, pause, rapid fire, long pause, finale
   };
 
-  Future<void> initialize() async {
-    // Initialize vibration service
-  }
+  // Get patterns (unified for all platforms)
+  static Map<String, List<int>> get patterns => _vibrationPatterns;
 
   Future<bool> hasVibrator() async {
     return await Vibration.hasVibrator();
@@ -62,9 +169,21 @@ class VibrationService {
 
     final pattern = patterns[patternName]!;
     if (await hasVibrator()) {
-      await Vibration.vibrate(
-          pattern: pattern,
-          intensities: List.filled(pattern.length, intensity));
+      // Always use manual playback for consistent pattern distinction
+      await _playPatternManually(pattern, intensity);
+    }
+  }
+
+  // Manual pattern playback for better control and clearer distinction
+  Future<void> _playPatternManually(List<int> pattern, int intensity) async {
+    for (int i = 0; i < pattern.length; i++) {
+      if (i % 2 == 0) {
+        // Even indices are vibration durations
+        await Vibration.vibrate(duration: pattern[i], amplitude: intensity);
+      } else {
+        // Odd indices are pause durations - crucial for pattern distinction
+        await Future.delayed(Duration(milliseconds: pattern[i]));
+      }
     }
   }
 
@@ -188,9 +307,7 @@ class VibrationService {
       String? crossingType}) async {
     await playPattern('crossingStreet', intensity: intensity);
 
-    if (withTTS &&
-        _settingsService.currentSettings.ttsEnabled &&
-        _settingsService.currentSettings.announceHazards) {
+    if (withTTS && _settingsService.currentSettings.ttsEnabled) {
       await _ttsService.announceCrossing(
           streetName: streetName, crossingType: crossingType);
     }
@@ -203,28 +320,86 @@ class VibrationService {
       String? description}) async {
     await playPattern('hazardWarning', intensity: intensity);
 
-    if (withTTS &&
-        _settingsService.currentSettings.ttsEnabled &&
-        _settingsService.currentSettings.announceHazards) {
-      await _ttsService.announceHazard(hazardType ?? 'unknown',
+    if (withTTS && _settingsService.currentSettings.ttsEnabled) {
+      await _ttsService.announceHazard(hazardType ?? 'hazard',
           description: description);
     }
   }
 
   // Emergency feedback methods with TTS integration
   Future<void> emergencyStopWithTTSFeedback({bool withTTS = false}) async {
-    await playPattern('emergencyStop');
+    await emergencyStopFeedback();
 
     if (withTTS && _settingsService.currentSettings.ttsEnabled) {
-      await _ttsService.announceEmergency('stop', 'stop');
+      await _ttsService.announceEmergency('emergency', 'stop');
     }
   }
 
   Future<void> emergencyReroutingWithTTSFeedback({bool withTTS = false}) async {
-    await playPattern('emergencyRerouting');
+    await emergencyReroutingFeedback();
 
     if (withTTS && _settingsService.currentSettings.ttsEnabled) {
-      await _ttsService.announceEmergency('rerouting', 'reroute');
+      await _ttsService.announceEmergency('rerouting', 'recalculating');
     }
+  }
+
+  // Platform-specific intensity calibration
+  int _calibrateIntensityForPlatform(int requestedIntensity) {
+    if (_isIOS) {
+      // iOS tends to feel weaker, so boost intensity slightly
+      return (requestedIntensity * 1.2).round().clamp(1, 255);
+    } else {
+      // Android intensity is more direct
+      return requestedIntensity;
+    }
+  }
+
+  // Platform-aware simple vibrate with calibrated intensity
+  Future<void> platformOptimizedVibrate({
+    int duration = 200,
+    int intensity = mediumIntensity,
+  }) async {
+    final calibratedIntensity = _calibrateIntensityForPlatform(intensity);
+
+    if (await hasVibrator()) {
+      if (_isIOS && duration > 1000) {
+        // iOS has limitations on long vibrations, break them down
+        final segments = (duration / 500).ceil();
+        final segmentDuration = duration ~/ segments;
+
+        for (int i = 0; i < segments; i++) {
+          await Vibration.vibrate(
+              duration: segmentDuration, amplitude: calibratedIntensity);
+          if (i < segments - 1) {
+            await Future.delayed(const Duration(milliseconds: 50));
+          }
+        }
+      } else {
+        await Vibration.vibrate(
+            duration: duration, amplitude: calibratedIntensity);
+      }
+    }
+  }
+
+  // Debug method to test all patterns in sequence
+  Future<void> testAllPatterns({int intensity = mediumIntensity}) async {
+    final patternNames = patterns.keys.toList();
+
+    for (String patternName in patternNames) {
+      debugPrint('Testing pattern: $patternName');
+      await playPattern(patternName, intensity: intensity);
+      await Future.delayed(
+          const Duration(seconds: 2)); // Pause between patterns
+    }
+  }
+
+  // Test a specific pattern with announcement
+  Future<void> testPatternWithAnnouncement(String patternName,
+      {int intensity = mediumIntensity}) async {
+    if (_settingsService.currentSettings.ttsEnabled) {
+      await _ttsService.speak('Testing $patternName pattern');
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    await playPattern(patternName, intensity: intensity);
   }
 }

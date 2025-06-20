@@ -43,44 +43,6 @@ class HazardService {
   Set<String> get activeWarningHazards =>
       Set.unmodifiable(_activeWarningHazards);
 
-  // Initialize hazard detection
-  Future<void> initialize() async {
-    // In a real app, we would load known hazards from a database or API
-    await _vibrationService.initialize();
-
-    // Add test hazards for development purposes
-    _addTestHazards();
-  }
-
-  // Add test hazards for development
-  void _addTestHazards() {
-    // This would be replaced with real data in production
-    _knownHazards.add(
-      Hazard(
-        id: '1',
-        position: const LatLng(53.0783, 8.8017), // Example coordinates
-        type: HazardType.construction,
-        severity: HazardSeverity.medium,
-        description: 'Sidewalk construction',
-        reportedAt: DateTime.now().subtract(const Duration(days: 1)),
-        validUntil: DateTime.now().add(const Duration(days: 14)),
-        isVerified: true,
-      ),
-    );
-
-    _knownHazards.add(
-      Hazard(
-        id: '2',
-        position: const LatLng(53.0810, 8.8030), // Example coordinates
-        type: HazardType.obstacle,
-        severity: HazardSeverity.high,
-        description: 'Large pothole on path',
-        reportedAt: DateTime.now().subtract(const Duration(days: 2)),
-        isVerified: true,
-      ),
-    );
-  }
-
   // Start monitoring for hazards
   Future<bool> startMonitoring({RouteInformation? route}) async {
     if (_isMonitoring) return true;
@@ -171,9 +133,8 @@ class HazardService {
     // Skip if we've warned recently (unless it's a critical hazard)
     if (_lastWarningTime != null &&
         hazard.severity != HazardSeverity.critical) {
-      final timeSinceLastWarning = DateTime.now()
-          .difference(_lastWarningTime!)
-          .inSeconds;
+      final timeSinceLastWarning =
+          DateTime.now().difference(_lastWarningTime!).inSeconds;
       if (timeSinceLastWarning < _minTimeBetweenWarnings) return;
     }
 

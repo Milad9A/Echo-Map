@@ -9,12 +9,12 @@ import '../models/hazard.dart';
 import '../services/emergency_service.dart';
 import '../services/vibration_service.dart';
 import '../services/routing_service.dart';
-import '../services/text_to_speech_service.dart'; // Add this import
+import '../services/text_to_speech_service.dart';
 
 enum NavigationStatus {
   idle,
   active,
-  paused, // Add paused status
+  paused,
   rerouting,
   arrived,
   error,
@@ -68,10 +68,8 @@ class NavigationMonitoringService {
   bool _isPaused = false; // Add pause state tracking
 
   // Configuration
-  double _routeDeviationThreshold =
-      15.0; // Reduced from 50.0 for more precision
-  double _destinationReachedThreshold =
-      5.0; // Reduced from 10.0 for more precision
+  double _routeDeviationThreshold = 5.0;
+  double _destinationReachedThreshold = 5.0;
 
   // Services (these would be injected in a real implementation)
   StreamSubscription<Position>? _locationSubscription;
@@ -444,14 +442,8 @@ class NavigationMonitoringService {
 
     _distanceToDestination = distanceToDestination.round();
 
-    // Calculate estimated time remaining based on current speed
-    if (_currentSpeed > 0.1) {
-      // Use current speed if available and reasonable
-      _estimatedTimeRemaining = (distanceToDestination / _currentSpeed).round();
-    } else {
-      // Fallback to average walking speed (1.4 m/s)
-      _estimatedTimeRemaining = (distanceToDestination / 1.4).round();
-    }
+    // Use average walking speed (1.4 m/s)
+    _estimatedTimeRemaining = (distanceToDestination / 1.4).round();
 
     // Find next step if route has steps
     if (_currentRoute!.hasSteps) {

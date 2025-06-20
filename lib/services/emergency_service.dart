@@ -108,7 +108,6 @@ class EmergencyService {
 
   // Initialize emergency service
   Future<void> initialize() async {
-    await _vibrationService.initialize();
     _isActive = true;
     _log('Emergency service initialized');
   }
@@ -123,9 +122,8 @@ class EmergencyService {
   }) async {
     // Check if we've had a very recent emergency
     if (_lastEmergencyTime != null) {
-      final timeSinceLastEmergency = DateTime.now()
-          .difference(_lastEmergencyTime!)
-          .inSeconds;
+      final timeSinceLastEmergency =
+          DateTime.now().difference(_lastEmergencyTime!).inSeconds;
       if (timeSinceLastEmergency < _minTimeBetweenEmergencies) {
         _log('Emergency ignored - too soon after previous emergency');
         return false;

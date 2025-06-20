@@ -132,10 +132,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _initializeApp() async {
     try {
-      // Initialize vibration service first - reduced delay
-      await _updateStatus('Setting up haptic feedback...', 200);
-      await _vibrationService.initialize();
-
       // Check if vibration is available and provide initial feedback
       final hasVibrator = await _vibrationService.hasVibrator();
       if (hasVibrator) {

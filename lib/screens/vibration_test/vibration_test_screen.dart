@@ -43,8 +43,6 @@ class _VibrationTestScreenState extends State<VibrationTestScreen> {
         });
       }
 
-      await _vibrationService.initialize();
-
       final hasVibrator = await _vibrationService.hasVibrator();
       final hasAmplitudeControl = await _vibrationService.hasAmplitudeControl();
 

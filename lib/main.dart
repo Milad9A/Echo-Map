@@ -12,7 +12,6 @@ import 'screens/home/home_screen.dart';
 import 'screens/vibration_test/vibration_test_screen.dart';
 import 'screens/location_test/location_test_screen.dart';
 import 'screens/map/map_screen.dart';
-import 'services/vibration_service.dart';
 import 'services/location_service.dart';
 import 'services/geocoding_service.dart';
 import 'services/recent_places_service.dart';
@@ -39,10 +38,6 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
-  // Initialize services
-  final vibrationService = VibrationService();
-  await vibrationService.initialize();
 
   final locationService = LocationService();
   await locationService.initialize();

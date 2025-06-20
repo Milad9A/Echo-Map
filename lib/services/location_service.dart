@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
+import 'location_timeout_handler.dart';
 
 enum LocationStatus {
   initial,
@@ -72,6 +73,94 @@ class LocationService {
       _updateStatus(LocationStatus.error);
       return false;
     }
+  }
+
+  // Initialize location services with comprehensive error handling
+  Future<bool> initializeLocationServices() async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('Location services are disabled');
+        return false;
+      }
+
+      // Check and request permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('Location permissions are denied');
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('Location permissions are permanently denied');
+        return false;
+      }
+
+      // Try to get an initial position with timeout
+      try {
+        final position = await getCurrentPositionWithRetry();
+        if (position != null) {
+          debugPrint('Location services initialized successfully');
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Could not get initial position: $e');
+        // Still return true if permissions are OK, position might be available later
+        return true;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error initializing location services: $e');
+      return false;
+    }
+  }
+
+  // Get current position with retry logic
+  Future<Position?> getCurrentPositionWithRetry({
+    int maxRetries = 3,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: LocationSettings(
+            accuracy:
+                attempt == 0 ? LocationAccuracy.high : LocationAccuracy.medium,
+            timeLimit: timeout,
+          ),
+        );
+
+        debugPrint(
+            'Got position on attempt ${attempt + 1}: ${position.latitude}, ${position.longitude}');
+        return position;
+      } on TimeoutException catch (e) {
+        debugPrint('Location timeout on attempt ${attempt + 1}: $e');
+        if (attempt == maxRetries - 1) {
+          // Last attempt, try to get last known position
+          final lastKnown = await getLastKnownPosition();
+          if (lastKnown != null) {
+            debugPrint('Using last known position as fallback');
+            return lastKnown;
+          }
+          throw LocationTimeoutException(
+              'Failed to get position after $maxRetries attempts');
+        }
+        // Wait before retrying
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      } catch (e) {
+        debugPrint('Location error on attempt ${attempt + 1}: $e');
+        if (attempt == maxRetries - 1) {
+          rethrow;
+        }
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      }
+    }
+    return null;
   }
 
   // Update tracking accuracy
@@ -277,6 +366,72 @@ class LocationService {
     }
   }
 
+  // Improved position stream with timeout handling
+  Stream<Position> getPositionStream({
+    Duration timeout = const Duration(seconds: 8),
+    int distanceFilter = 5,
+  }) {
+    return Geolocator.getPositionStream(
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: distanceFilter,
+      ),
+    ).timeout(
+      timeout,
+      onTimeout: (sink) {
+        debugPrint('Position stream timeout, attempting recovery...');
+        _handleLocationTimeout(sink);
+      },
+    ).handleError((error) {
+      debugPrint('Position stream error: $error');
+      // Add error to stream or handle appropriately
+    });
+  }
+
+  // Handle location timeout by trying to get last known position
+  void _handleLocationTimeout(EventSink<Position> sink) {
+    getLastKnownPosition().then((position) {
+      if (position != null) {
+        debugPrint('Using last known position after timeout');
+        sink.add(position);
+      } else {
+        sink.addError(LocationTimeoutException(
+            'Position stream timeout and no last known position available'));
+      }
+    });
+  }
+
+  // Get last known position with better error handling
+  Future<Position?> getLastKnownPosition() async {
+    try {
+      final position = await Geolocator.getLastKnownPosition(
+        forceAndroidLocationManager: false,
+      );
+
+      if (position != null) {
+        // Check if the position is too old (older than 5 minutes)
+        final now = DateTime.now();
+        final positionTime = position.timestamp;
+        final timeDifference = now.difference(positionTime);
+
+        if (timeDifference.inMinutes > 5) {
+          debugPrint(
+              'Last known position is too old: ${timeDifference.inMinutes} minutes');
+          return null;
+        }
+
+        debugPrint(
+            'Using last known position from ${timeDifference.inSeconds} seconds ago');
+        return position;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Error getting last known position: $e');
+      return null;
+    }
+  }
+
   // Private helper to check current permission status
   Future<bool> _checkPermissionStatus() async {
     try {
@@ -354,4 +509,64 @@ class LocationService {
     _locationController.close();
     _statusController.close();
   }
+
+  /// Initialize location services with timeout handling
+  Future<bool> initializeWithTimeoutHandling() async {
+    try {
+      // Use the timeout handler for robust initialization
+      final isSetupValid = await LocationTimeoutHandler.isLocationSetupValid();
+      if (!isSetupValid) {
+        debugPrint('Location setup invalid, requesting permissions...');
+        final permissionsOk =
+            await LocationTimeoutHandler.requestLocationPermissions();
+        if (!permissionsOk) {
+          debugPrint('Could not get location permissions');
+          return false;
+        }
+      }
+
+      // Try to get an initial position to verify everything works
+      final initialPosition =
+          await LocationTimeoutHandler.getCurrentPositionSafely(
+        timeout: const Duration(seconds: 10),
+        maxRetries: 2,
+      );
+
+      if (initialPosition != null) {
+        debugPrint('Location service initialized successfully');
+        return true;
+      } else {
+        debugPrint(
+            'Location service initialized but could not get initial position');
+        // Still return true as location might work later
+        return true;
+      }
+    } catch (e) {
+      debugPrint(
+          'Error initializing location service with timeout handling: $e');
+      return false;
+    }
+  }
+}
+
+// Custom exceptions for location handling
+class LocationTimeoutException implements Exception {
+  final String message;
+  LocationTimeoutException(this.message);
+  @override
+  String toString() => 'LocationTimeoutException: $message';
+}
+
+class LocationPermissionException implements Exception {
+  final String message;
+  LocationPermissionException(this.message);
+  @override
+  String toString() => 'LocationPermissionException: $message';
+}
+
+class LocationServiceDisabledException implements Exception {
+  final String message;
+  LocationServiceDisabledException(this.message);
+  @override
+  String toString() => 'LocationServiceDisabledException: $message';
 }
