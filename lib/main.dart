@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:echo_map/screens/settings/settings_screen.dart';
 import 'package:echo_map/screens/splash/splash_screen.dart';
+import 'package:echo_map/screens/location_permission/location_permission_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -125,6 +126,8 @@ class _EchoMapAppState extends State<EchoMapApp> {
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashScreen(),
+          '/location_permission': (context) => const LocationPermissionScreen(),
+          '/home': (context) => const HomeScreen(),
           '/map': (context) => const MapScreen(),
           '/settings': (context) => const SettingsScreen(),
           '/vibration_test': (context) => const VibrationTestScreen(),

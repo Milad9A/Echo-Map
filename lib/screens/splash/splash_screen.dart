@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../utils/theme_config.dart';
 import '../../services/vibration_service.dart';
 import '../../services/settings_service.dart';
@@ -184,10 +185,42 @@ class _SplashScreenState extends State<SplashScreen>
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        // Check location permissions before navigating
+        await _checkLocationPermissionsAndNavigate();
       }
     } catch (e) {
       await _handleInitializationError(e);
+    }
+  }
+
+  Future<void> _checkLocationPermissionsAndNavigate() async {
+    try {
+      // Check if location services are enabled
+      final isLocationServiceEnabled =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!isLocationServiceEnabled) {
+        // Navigate to permission screen to handle service disabled state
+        Navigator.of(context).pushReplacementNamed('/location_permission');
+        return;
+      }
+
+      // Check location permissions
+      final permission = await Geolocator.checkPermission();
+
+      // Always show permission screen unless permission is already granted
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
+        // Permission is already granted, navigate to home
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        // Permission is not granted (denied, deniedForever, or not determined), navigate to permission screen
+        Navigator.of(context).pushReplacementNamed('/location_permission');
+      }
+    } catch (e) {
+      debugPrint('Error checking location permissions: $e');
+      // On error, navigate to permission screen to handle it properly
+      Navigator.of(context).pushReplacementNamed('/location_permission');
     }
   }
 
