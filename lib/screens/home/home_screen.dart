@@ -10,6 +10,7 @@ import '../../blocs/location/location_event.dart';
 import '../../services/gesture_handler_service.dart';
 import '../../services/voice_command_service.dart';
 import '../../services/vibration_service.dart';
+import '../../services/analytics_service.dart';
 import '../../utils/theme_config.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -40,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     // Initialize location bloc
     context.read<LocationBloc>().add(LocationInitialize());
+
+    // Track screen view
+    AnalyticsService.logNavigation('home_screen');
   }
 
   void _setupAnimations() {

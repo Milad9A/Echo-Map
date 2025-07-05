@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'blocs/navigation/navigation_bloc.dart';
 import 'blocs/location/location_bloc.dart';
 import 'screens/home/home_screen.dart';
@@ -16,11 +18,20 @@ import 'services/location_service.dart';
 import 'services/geocoding_service.dart';
 import 'services/recent_places_service.dart';
 import 'services/settings_service.dart';
+import 'services/analytics_service.dart';
 import 'utils/platform_config.dart';
 import 'utils/theme_config.dart' hide AppThemeMode;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize Analytics
+  await AnalyticsService.initialize();
 
   // Load environment variables from .env file
   await dotenv.load();
@@ -108,6 +119,9 @@ class _EchoMapAppState extends State<EchoMapApp> {
         theme: _getTheme(ThemeMode.light),
         darkTheme: _getTheme(ThemeMode.dark),
         themeMode: _convertThemeMode(_currentSettings.themeMode),
+        navigatorObservers: [
+          AnalyticsService.observer,
+        ],
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashScreen(),

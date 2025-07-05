@@ -145,6 +145,25 @@ firebase use echo-map-49a3f
 
 For detailed deployment instructions, see [firebase_app_distribution.md](firebase_app_distribution.md).
 
+## Firebase Analytics
+
+EchoMap includes Firebase Analytics to track user interactions and app performance for accessibility improvements.
+
+### Analytics Events Tracked
+
+- **Screen Navigation**: Track which screens users visit most frequently
+- **Navigation Usage**: Monitor route calculations and navigation sessions
+- **Vibration Patterns**: Understand which haptic feedback patterns are most effective
+- **Accessibility Features**: Track usage of accessibility features
+- **Settings Changes**: Monitor which settings users modify most often
+- **Performance Metrics**: Track app performance for optimization
+
+### Privacy Considerations
+
+- Analytics are anonymous and help improve accessibility features
+- No personal location data is stored in analytics
+- Users can disable analytics in the Firebase Console if needed
+
 ## Testing Features
 
 EchoMap includes dedicated testing screens to validate core functionality:

@@ -54,6 +54,16 @@ app.*.map.json
 lib/constants/secrets.dart
 android/app/src/main/res/values/strings.xml
 
+# iOS build artifacts and distributions
+**/ios/build/
+**/ios/*.xcarchive/
+**/ios/**/*.ipa
+**/ios/**/DistributionSummary.plist
+**/ios/ExportOptions.plist
+**/ios/Runner.xcworkspace/xcuserdata/
+**/ios/Runner.xcodeproj/xcuserdata/
+**/ios/DerivedData/
+
 # iOS specific
 **/ios/Podfile.lock
 **/ios/.symlinks/
