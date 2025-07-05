@@ -6,6 +6,7 @@ import 'widgets/device_info_card.dart';
 import 'widgets/comparison_test_section.dart';
 import 'widgets/intensity_test_section.dart';
 import 'widgets/pattern_test_section.dart';
+import 'platform_vibration_comparison_screen.dart';
 
 class VibrationTestScreen extends StatefulWidget {
   const VibrationTestScreen({super.key});
@@ -159,6 +160,25 @@ class _VibrationTestScreenState extends State<VibrationTestScreen> {
                   ElevatedButton(
                     onPressed: () => _patternTester.testAllPatterns(),
                     child: const Text('Test All Patterns'),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () => _vibrationService.testPlatformConsistency(
+                      intensity: _currentIntensity,
+                    ),
+                    child: Text(
+                        'Test Platform Consistency (${Platform.isIOS ? 'iOS' : 'Android'})'),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const PlatformVibrationComparisonScreen(),
+                      ),
+                    ),
+                    child: const Text('Platform Comparison'),
                   ),
                 ],
               ),

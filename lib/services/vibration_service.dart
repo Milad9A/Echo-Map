@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 import 'settings_service.dart';
 import 'text_to_speech_service.dart';
@@ -21,35 +22,36 @@ class VibrationService {
   static const int mediumIntensity = 128;
   static const int highIntensity = 255;
 
-  // Unified vibration patterns (duration in milliseconds) - [vibration, pause, vibration, pause, ...]
-  static const Map<String, List<int>> _vibrationPatterns = {
-    'onRoute': [400], // Single medium vibration
+  // Platform-specific vibration patterns
+  // iOS patterns - optimized for iOS haptic feedback characteristics
+  static const Map<String, List<int>> _iOSVibrationPatterns = {
+    'onRoute': [350], // Single vibration with good presence
 
     'approachingTurn': [
       200,
-      300,
+      250,
       200,
-      300,
+      250,
       200,
       500,
       600,
       300,
       400
-    ], // Building rhythm: short-short-short-long-LONGER
+    ], // Balanced rhythm for iOS
 
     'leftTurn': [
       100,
-      200,
+      180,
       100,
-      200,
+      180,
       100,
-      200,
+      180,
       100,
-      200,
+      180,
       100,
       300,
       1200
-    ], // "tap-tap-tap-tap-tap-LOOOOOOONG" - builds up to climax
+    ], // Crisp taps with stronger ending
 
     'rightTurn': [
       1200,
@@ -65,55 +67,55 @@ class VibrationService {
       100,
       300,
       100
-    ], // "LOOOOOOONG-pause-tap-pause-tap-pause-tap-pause-tap-pause-tap" - starts strong, then clear details
+    ], // Strong start with clear taps
 
     'wrongDirection': [
       250,
-      150,
+      120,
       250,
-      150,
+      120,
       250,
-      800,
+      700,
       250,
-      150,
+      120,
       250,
-      150,
+      120,
       250,
-      800,
+      700,
       400,
-      200,
+      180,
       400
-    ], // Double urgent pattern with finale
+    ], // More pronounced urgent pattern
 
     'destinationReached': [
       300,
-      200,
+      180,
       400,
-      200,
+      180,
       500,
-      200,
+      180,
       600,
-      200,
+      180,
       700,
       300,
-      200,
+      180,
       300,
-      200,
+      180,
       300,
       800
-    ], // Celebration: ascending crescendo with finale
+    ], // Celebration with good presence
 
     'crossingStreet': [
       500,
-      1000,
+      900,
       500,
-      1000,
+      900,
       500,
-      1000,
+      900,
       500,
       500,
       200
-    ], // Slow deliberate warning pattern
+    ], // Deliberate warning pattern
 
     'hazardWarning': [
       80,
@@ -133,11 +135,132 @@ class VibrationService {
       80,
       800,
       300
-    ], // Rapid fire, pause, rapid fire, long pause, finale
+    ], // Rapid fire with stronger punctuation
   };
 
-  // Get patterns (unified for all platforms)
-  static Map<String, List<int>> get patterns => _vibrationPatterns;
+  // Android patterns - optimized for Android vibration motor characteristics
+  static const Map<String, List<int>> _androidVibrationPatterns = {
+    'onRoute': [400], // Slightly longer but not excessive
+
+    'approachingTurn': [
+      220,
+      280,
+      220,
+      280,
+      220,
+      550,
+      650,
+      330,
+      430
+    ], // Balanced for Android motors
+
+    'leftTurn': [
+      110,
+      200,
+      110,
+      200,
+      110,
+      200,
+      110,
+      200,
+      110,
+      320,
+      1300
+    ], // Crisp but substantial taps
+
+    'rightTurn': [
+      1300,
+      1300,
+      110,
+      320,
+      110,
+      320,
+      110,
+      320,
+      110,
+      320,
+      110,
+      320,
+      110
+    ], // Strong but controlled
+
+    'wrongDirection': [
+      280,
+      140,
+      280,
+      140,
+      280,
+      800,
+      280,
+      140,
+      280,
+      140,
+      280,
+      800,
+      450,
+      200,
+      450
+    ], // Urgent but not overwhelming
+
+    'destinationReached': [
+      320,
+      200,
+      420,
+      200,
+      520,
+      200,
+      620,
+      200,
+      720,
+      320,
+      200,
+      320,
+      200,
+      320,
+      850
+    ], // Celebration with good feel
+
+    'crossingStreet': [
+      550,
+      1000,
+      550,
+      1000,
+      550,
+      1000,
+      550,
+      550,
+      220
+    ], // Deliberate but not excessive
+
+    'hazardWarning': [
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      450,
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      900,
+      350
+    ], // Rapid fire with strong punctuation
+  };
+
+  // Get platform-appropriate patterns
+  static Map<String, List<int>> get patterns {
+    if (_isIOS) {
+      return _iOSVibrationPatterns;
+    } else {
+      return _androidVibrationPatterns;
+    }
+  }
 
   Future<bool> hasVibrator() async {
     return await Vibration.hasVibrator();
@@ -159,7 +282,11 @@ class VibrationService {
   Future<void> simpleVibrate(
       {int duration = 200, int amplitude = mediumIntensity}) async {
     if (await hasVibrator()) {
-      await Vibration.vibrate(duration: duration, amplitude: amplitude);
+      final calibratedIntensity = _calibrateIntensityForPlatform(amplitude);
+      await _platformOptimizedVibrate(
+        duration: duration,
+        intensity: calibratedIntensity,
+      );
     }
   }
 
@@ -174,15 +301,123 @@ class VibrationService {
     }
   }
 
-  // Manual pattern playback for better control and clearer distinction
+  // Platform-specific intensity calibration
+  int _calibrateIntensityForPlatform(int requestedIntensity) {
+    if (_isIOS) {
+      // iOS haptic feedback tends to feel weaker and less consistent
+      // Significant boost needed to match Android feel
+      final boosted = (requestedIntensity * 1.5).round();
+      return boosted.clamp(
+          100, 255); // Higher minimum for iOS to be felt clearly
+    } else {
+      // Android motors are more direct but can vary widely by device
+      // Apply moderate boost for consistency and to match iOS feel
+      final adjusted = (requestedIntensity * 1.2).round();
+      return adjusted.clamp(50, 255); // Ensure minimum perceptible level
+    }
+  }
+
+  // Platform-aware pattern playback with optimized timing
   Future<void> _playPatternManually(List<int> pattern, int intensity) async {
+    final calibratedIntensity = _calibrateIntensityForPlatform(intensity);
+
+    // Pre-warm the haptic engine on iOS for better consistency
+    if (_isIOS) {
+      try {
+        await HapticFeedback.selectionClick();
+        await Future.delayed(const Duration(milliseconds: 30));
+      } catch (e) {
+        // If system haptic fails, continue without pre-warm
+        debugPrint('iOS haptic pre-warm failed: $e');
+      }
+    }
+
     for (int i = 0; i < pattern.length; i++) {
       if (i % 2 == 0) {
         // Even indices are vibration durations
-        await Vibration.vibrate(duration: pattern[i], amplitude: intensity);
+        await _platformOptimizedVibrate(
+            duration: pattern[i], intensity: calibratedIntensity);
       } else {
         // Odd indices are pause durations - crucial for pattern distinction
-        await Future.delayed(Duration(milliseconds: pattern[i]));
+        // iOS needs slightly longer pauses for pattern clarity
+        // Android needs consistent pauses for pattern recognition
+        final pauseDuration = _isIOS
+            ? (pattern[i] * 1.15).round()
+            : (pattern[i] * 1.05).round(); // Slight boost for Android too
+        await Future.delayed(Duration(milliseconds: pauseDuration));
+      }
+    }
+  }
+
+  // Enhanced iOS haptic feedback for better consistency
+  Future<void> _enhancedIOSHaptic({
+    required int duration,
+    required int intensity,
+  }) async {
+    if (_isIOS) {
+      // Use iOS system haptic feedback as a primer
+      try {
+        if (intensity >= 200) {
+          await HapticFeedback.heavyImpact();
+        } else if (intensity >= 100) {
+          await HapticFeedback.mediumImpact();
+        } else {
+          await HapticFeedback.lightImpact();
+        }
+
+        // Small delay to let system haptic settle
+        await Future.delayed(const Duration(milliseconds: 20));
+      } catch (e) {
+        // If system haptic fails, continue with regular vibration
+        debugPrint('iOS haptic feedback failed: $e');
+      }
+    }
+
+    // Follow with regular vibration for consistency
+    await Vibration.vibrate(duration: duration, amplitude: intensity);
+  }
+
+  // Platform-optimized vibration method
+  Future<void> _platformOptimizedVibrate({
+    required int duration,
+    required int intensity,
+  }) async {
+    if (_isIOS) {
+      // iOS has better results with enhanced haptic feedback
+      if (duration > 600) {
+        // Break long vibrations into segments for iOS with enhanced haptics
+        final segments = (duration / 300).ceil();
+        final segmentDuration = duration ~/ segments;
+        final gapDuration = 30; // Very short gap between segments
+
+        for (int i = 0; i < segments; i++) {
+          await _enhancedIOSHaptic(
+              duration: segmentDuration, intensity: intensity);
+          if (i < segments - 1) {
+            await Future.delayed(Duration(milliseconds: gapDuration));
+          }
+        }
+      } else {
+        // For shorter vibrations, use enhanced haptic feedback
+        await _enhancedIOSHaptic(duration: duration, intensity: intensity);
+      }
+    } else {
+      // Android can handle longer vibrations better, but add consistency measures
+      if (duration > 1000) {
+        // Even Android benefits from segmentation for very long vibrations
+        final segments = (duration / 500).ceil();
+        final segmentDuration = duration ~/ segments;
+        final gapDuration = 20; // Minimal gap for Android
+
+        for (int i = 0; i < segments; i++) {
+          await Vibration.vibrate(
+              duration: segmentDuration, amplitude: intensity);
+          if (i < segments - 1) {
+            await Future.delayed(Duration(milliseconds: gapDuration));
+          }
+        }
+      } else {
+        await Vibration.vibrate(duration: duration, amplitude: intensity);
       }
     }
   }
@@ -343,44 +578,6 @@ class VibrationService {
     }
   }
 
-  // Platform-specific intensity calibration
-  int _calibrateIntensityForPlatform(int requestedIntensity) {
-    if (_isIOS) {
-      // iOS tends to feel weaker, so boost intensity slightly
-      return (requestedIntensity * 1.2).round().clamp(1, 255);
-    } else {
-      // Android intensity is more direct
-      return requestedIntensity;
-    }
-  }
-
-  // Platform-aware simple vibrate with calibrated intensity
-  Future<void> platformOptimizedVibrate({
-    int duration = 200,
-    int intensity = mediumIntensity,
-  }) async {
-    final calibratedIntensity = _calibrateIntensityForPlatform(intensity);
-
-    if (await hasVibrator()) {
-      if (_isIOS && duration > 1000) {
-        // iOS has limitations on long vibrations, break them down
-        final segments = (duration / 500).ceil();
-        final segmentDuration = duration ~/ segments;
-
-        for (int i = 0; i < segments; i++) {
-          await Vibration.vibrate(
-              duration: segmentDuration, amplitude: calibratedIntensity);
-          if (i < segments - 1) {
-            await Future.delayed(const Duration(milliseconds: 50));
-          }
-        }
-      } else {
-        await Vibration.vibrate(
-            duration: duration, amplitude: calibratedIntensity);
-      }
-    }
-  }
-
   // Debug method to test all patterns in sequence
   Future<void> testAllPatterns({int intensity = mediumIntensity}) async {
     final patternNames = patterns.keys.toList();
@@ -401,5 +598,134 @@ class VibrationService {
       await Future.delayed(const Duration(milliseconds: 500));
     }
     await playPattern(patternName, intensity: intensity);
+  }
+
+  // Platform-aware simple vibrate with calibrated intensity (public method)
+  Future<void> platformOptimizedVibrate({
+    int duration = 200,
+    int intensity = mediumIntensity,
+  }) async {
+    final calibratedIntensity = _calibrateIntensityForPlatform(intensity);
+
+    if (await hasVibrator()) {
+      await _platformOptimizedVibrate(
+        duration: duration,
+        intensity: calibratedIntensity,
+      );
+    }
+  }
+
+  // Test method to compare platform vibration patterns
+  Future<void> testPlatformConsistency(
+      {int intensity = mediumIntensity}) async {
+    debugPrint('Testing platform consistency on ${_isIOS ? 'iOS' : 'Android'}');
+
+    // Test basic vibration with new calibration
+    debugPrint('Testing basic vibration with enhanced calibration...');
+    await platformOptimizedVibrate(duration: 500, intensity: intensity);
+    await Future.delayed(const Duration(seconds: 1));
+
+    // Test intensity levels
+    debugPrint('Testing intensity levels...');
+    await platformOptimizedVibrate(duration: 300, intensity: lowIntensity);
+    await Future.delayed(const Duration(milliseconds: 800));
+    await platformOptimizedVibrate(duration: 300, intensity: mediumIntensity);
+    await Future.delayed(const Duration(milliseconds: 800));
+    await platformOptimizedVibrate(duration: 300, intensity: highIntensity);
+    await Future.delayed(const Duration(seconds: 1));
+
+    // Test all patterns with platform optimization
+    final patternNames = patterns.keys.toList();
+    for (String patternName in patternNames) {
+      debugPrint(
+          'Testing $patternName pattern with enhanced platform optimization...');
+      await playPattern(patternName, intensity: intensity);
+      await Future.delayed(const Duration(seconds: 2));
+    }
+
+    debugPrint('Platform consistency test completed');
+  }
+
+  // New method to test cross-platform feel similarity
+  Future<void> testCrossPlatformFeel({int intensity = mediumIntensity}) async {
+    debugPrint('Testing cross-platform feel similarity...');
+
+    // Test the key patterns that should feel similar across platforms
+    final keyPatterns = ['onRoute', 'leftTurn', 'rightTurn', 'wrongDirection'];
+
+    for (String pattern in keyPatterns) {
+      debugPrint('Testing $pattern for cross-platform consistency...');
+      if (_settingsService.currentSettings.ttsEnabled) {
+        await _ttsService.speak('Testing $pattern');
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      await playPattern(pattern, intensity: intensity);
+      await Future.delayed(const Duration(seconds: 2));
+    }
+
+    debugPrint('Cross-platform feel test completed');
+  }
+
+  // Get platform information for debugging
+  Map<String, dynamic> getPlatformInfo() {
+    return {
+      'platform': _isIOS ? 'iOS' : 'Android',
+      'patternsCount': patterns.length,
+      'intensityCalibration':
+          _isIOS ? '1.5x boost, min 100' : '1.2x boost, min 50',
+      'patternOptimization': _isIOS
+          ? 'Shorter durations, longer pauses, pre-warm'
+          : 'Moderate durations, consistent pauses',
+      'longVibrationHandling': _isIOS
+          ? 'Segmented (max 600ms) with pre-vibration'
+          : 'Segmented (max 1000ms)',
+      'improvements': [
+        'Enhanced intensity calibration for cross-platform consistency',
+        'Pre-warming haptic engine on iOS for better responsiveness',
+        'Optimized pause durations for better pattern recognition',
+        'Balanced vibration patterns between platforms',
+        'Improved segmentation for long vibrations'
+      ],
+    };
+  }
+
+  // Check device capabilities and adjust accordingly
+  Future<Map<String, bool>> getDeviceCapabilities() async {
+    final hasVibrator = await this.hasVibrator();
+    final hasAmplitude = await hasAmplitudeControl();
+
+    return {
+      'hasVibrator': hasVibrator,
+      'hasAmplitudeControl': hasAmplitude,
+      'isPlatformOptimized': true,
+      'supportsPatterns': hasVibrator,
+    };
+  }
+
+  // Enhanced simple vibrate with device capability awareness
+  Future<void> adaptiveVibrate({
+    int duration = 200,
+    int intensity = mediumIntensity,
+  }) async {
+    final capabilities = await getDeviceCapabilities();
+
+    if (!capabilities['hasVibrator']!) return;
+
+    final calibratedIntensity = _calibrateIntensityForPlatform(intensity);
+
+    if (capabilities['hasAmplitudeControl']!) {
+      // Device supports amplitude control
+      await _platformOptimizedVibrate(
+        duration: duration,
+        intensity: calibratedIntensity,
+      );
+    } else {
+      // Fallback for devices without amplitude control
+      await _platformOptimizedVibrate(
+        duration: duration,
+        intensity:
+            255, // Use max intensity for devices without amplitude control
+      );
+    }
   }
 }
