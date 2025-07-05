@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "198276033289",
+    "project_id": "echo-map-49a3f",
+    "storage_bucket": "echo-map-49a3f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:198276033289:android:ffc03ebe7abab5cf9ac1d8",
+        "android_client_info": {
+          "package_name": "com.milad9a.echo_map"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAr2sq6IEGAadEZhqRp-OJC3jzMucSw0CM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

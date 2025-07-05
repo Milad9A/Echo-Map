@@ -116,6 +116,35 @@ flutter pub get
 flutter run
 ```
 
+## Deployment
+
+EchoMap uses Firebase App Distribution for beta testing and app distribution across both iOS and Android platforms.
+
+### Quick Deploy
+
+```bash
+# First time setup
+chmod +x deploy_firebase_all.sh
+
+# Deploy both platforms
+./deploy_firebase_all.sh
+```
+
+### Firebase Console Links
+
+- 📲 **Android**: https://console.firebase.google.com/project/echo-map-49a3f/appdistribution/app/android:com.milad9a.echo_map
+- 🍎 **iOS**: https://console.firebase.google.com/project/echo-map-49a3f/appdistribution/app/ios:com.milad9a.echoMap
+
+### Prerequisites for Deployment
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use echo-map-49a3f
+```
+
+For detailed deployment instructions, see [firebase_app_distribution.md](firebase_app_distribution.md).
+
 ## Testing Features
 
 EchoMap includes dedicated testing screens to validate core functionality:
