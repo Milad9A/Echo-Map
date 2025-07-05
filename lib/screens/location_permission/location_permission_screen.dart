@@ -91,7 +91,9 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
     );
 
     // Request permission through the bloc
-    context.read<LocationBloc>().add(LocationPermissionRequest());
+    if (mounted) {
+      context.read<LocationBloc>().add(LocationPermissionRequest());
+    }
   }
 
   void _handleSkipForNow() async {
@@ -105,7 +107,9 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
     );
 
     // Navigate to home screen
-    Navigator.of(context).pushReplacementNamed('/home');
+    if (mounted) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
   }
 
   void _handleOpenSettings() async {
@@ -170,7 +174,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
                             color: Theme.of(context)
                                 .colorScheme
                                 .primary
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             border: Border.all(
                               color: Theme.of(context).colorScheme.primary,
                               width: 2,
@@ -250,7 +254,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurface
-                                        .withOpacity(0.8),
+                                        .withValues(alpha: 0.8),
                                   ),
                           textAlign: TextAlign.center,
                           semanticsLabel: description,
@@ -425,7 +429,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurface
-                                    .withOpacity(0.7),
+                                    .withValues(alpha: 0.7),
                               ),
                               semanticsLabel:
                                   'Continue without location access',
@@ -460,7 +464,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
                             color: Theme.of(context)
                                 .colorScheme
                                 .onSurface
-                                .withOpacity(0.7),
+                                .withValues(alpha: 0.7),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -473,7 +477,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen>
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurface
-                                        .withOpacity(0.7),
+                                        .withValues(alpha: 0.7),
                                   ),
                               semanticsLabel:
                                   'Privacy notice: location data is used only for navigation',

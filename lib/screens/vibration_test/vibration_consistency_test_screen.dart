@@ -190,6 +190,7 @@ class _VibrationConsistencyTestScreenState
           duration: 400, intensity: VibrationService.lowIntensity);
       await Future.delayed(const Duration(seconds: 1));
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Testing Medium Intensity...')),
       );
@@ -197,12 +198,14 @@ class _VibrationConsistencyTestScreenState
           duration: 400, intensity: VibrationService.mediumIntensity);
       await Future.delayed(const Duration(seconds: 1));
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Testing High Intensity...')),
       );
       await _vibrationService.adaptiveVibrate(
           duration: 400, intensity: VibrationService.highIntensity);
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Intensity test completed')),
       );
@@ -223,6 +226,7 @@ class _VibrationConsistencyTestScreenState
       ];
 
       for (final pattern in keyPatterns) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Testing $pattern...')),
         );
@@ -230,6 +234,7 @@ class _VibrationConsistencyTestScreenState
         await Future.delayed(const Duration(seconds: 2));
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Key patterns test completed')),
       );
@@ -243,6 +248,7 @@ class _VibrationConsistencyTestScreenState
 
     try {
       await _vibrationService.testCrossPlatformFeel();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cross-platform feel test completed')),
       );
@@ -256,6 +262,7 @@ class _VibrationConsistencyTestScreenState
 
     try {
       await _vibrationService.testPlatformConsistency();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Platform consistency test completed')),
       );

@@ -74,7 +74,7 @@ class _PlatformVibrationComparisonScreenState
     final platformInfo = _vibrationService.getPlatformInfo();
 
     return Card(
-      color: _platformColor.withOpacity(0.1),
+      color: _platformColor.withValues(alpha: 0.1),
       child: Padding(
         padding: const EdgeInsets.all(ThemeConfig.standardPadding),
         child: Column(

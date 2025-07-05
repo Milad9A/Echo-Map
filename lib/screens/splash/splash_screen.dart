@@ -201,7 +201,9 @@ class _SplashScreenState extends State<SplashScreen>
 
       if (!isLocationServiceEnabled) {
         // Navigate to permission screen to handle service disabled state
-        Navigator.of(context).pushReplacementNamed('/location_permission');
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/location_permission');
+        }
         return;
       }
 
@@ -212,15 +214,21 @@ class _SplashScreenState extends State<SplashScreen>
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
         // Permission is already granted, navigate to home
-        Navigator.of(context).pushReplacementNamed('/home');
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
       } else {
         // Permission is not granted (denied, deniedForever, or not determined), navigate to permission screen
-        Navigator.of(context).pushReplacementNamed('/location_permission');
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/location_permission');
+        }
       }
     } catch (e) {
       debugPrint('Error checking location permissions: $e');
       // On error, navigate to permission screen to handle it properly
-      Navigator.of(context).pushReplacementNamed('/location_permission');
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/location_permission');
+      }
     }
   }
 
