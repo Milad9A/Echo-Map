@@ -10,7 +10,7 @@ This folder contains deployment and build automation scripts.
   - Uploads to TestFlight
   - Usage: `./deploy_testflight.sh`
 
-- **`deploy_firebase.sh`** - Cross-platform deployment script for Firebase App Distribution
+- **`deploy_firebase.sh`** - Cross-platform Firebase App Distribution deployment script
   - Builds both Android APK and iOS IPA
   - Uploads to Firebase App Distribution
   - Usage: `./deploy_firebase.sh`

@@ -31,11 +31,22 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# Get the script directory and navigate to project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
 # Check if we're in the right directory
 if [[ ! -f "pubspec.yaml" ]]; then
-    print_error "pubspec.yaml not found. Please run this script from the project root directory."
+    print_error "pubspec.yaml not found. Unable to locate project root directory."
+    print_error "Script directory: $SCRIPT_DIR"
+    print_error "Expected project root: $PROJECT_ROOT"
     exit 1
 fi
+
+print_status "Working from project root: $PROJECT_ROOT"
 
 # Get current version from pubspec.yaml
 current_version=$(grep "^version:" pubspec.yaml | sed 's/version: //')

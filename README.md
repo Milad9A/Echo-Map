@@ -118,19 +118,7 @@ flutter run
 
 ## Deployment
 
-EchoMap supports two deployment methods:
-
-### TestFlight (iOS Only)
-
-For iOS TestFlight distribution:
-
-```bash
-# First time setup
-chmod +x scripts/deploy_testflight.sh
-
-# Deploy to TestFlight
-./scripts/deploy_testflight.sh
-```
+EchoMap uses Firebase App Distribution for beta testing and app distribution across both iOS and Android platforms.
 
 ### Firebase App Distribution (Cross-Platform)
 
@@ -140,13 +128,13 @@ For beta testing across both iOS and Android platforms:
 
 ```bash
 # First time setup
-chmod +x deploy_firebase.sh
+chmod +x scripts/deploy_firebase.sh
 
 # Deploy both platforms
-./deploy_firebase.sh
+./scripts/deploy_firebase.sh
 ```
 
-### Firebase Console Links
+### Console Links
 
 - 📲 **Android**: https://console.firebase.google.com/project/echo-map-49a3f/appdistribution/app/android:com.milad9a.echo_map
 - 🍎 **iOS**: https://console.firebase.google.com/project/echo-map-49a3f/appdistribution/app/ios:com.milad9a.echoMap

@@ -10,6 +10,18 @@ chmod +x scripts/deploy_firebase.sh
 
 # Deploy to both platforms
 ./scripts/deploy_firebase.sh
+```p Distribution Setup Guide (Android)
+
+Firebase App Distribution provides free beta testing for Android apps. For iOS, we use the dedicated TestFlight deployment script.
+
+## Quick Start
+
+```bash
+# Make script executable (first time only)
+chmod +x scripts/deploy_firebase.sh
+
+# Deploy Android to Firebase
+./scripts/deploy_firebase.sh
 ```
 
 ## Prerequisites
@@ -62,6 +74,7 @@ firebase use echo-map-49a3f
 2. **Permission denied**: Run `chmod +x scripts/deploy_firebase.sh`
 3. **iOS build fails**: Check Xcode configuration and certificates
 4. **Android build fails**: Verify Android SDK and Flutter setup
+5. **Upload fails**: Check Firebase CLI login status with `firebase login:list`
 
 ### Build Output Locations
 
