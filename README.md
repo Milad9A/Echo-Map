@@ -118,16 +118,32 @@ flutter run
 
 ## Deployment
 
-EchoMap uses Firebase App Distribution for beta testing and app distribution across both iOS and Android platforms.
+EchoMap supports two deployment methods:
+
+### TestFlight (iOS Only)
+
+For iOS TestFlight distribution:
+
+```bash
+# First time setup
+chmod +x scripts/deploy_testflight.sh
+
+# Deploy to TestFlight
+./scripts/deploy_testflight.sh
+```
+
+### Firebase App Distribution (Cross-Platform)
+
+For beta testing across both iOS and Android platforms:
 
 ### Quick Deploy
 
 ```bash
 # First time setup
-chmod +x deploy_firebase_all.sh
+chmod +x deploy_firebase.sh
 
 # Deploy both platforms
-./deploy_firebase_all.sh
+./deploy_firebase.sh
 ```
 
 ### Firebase Console Links
@@ -143,7 +159,7 @@ firebase login
 firebase use echo-map-49a3f
 ```
 
-For detailed deployment instructions, see [firebase_app_distribution.md](firebase_app_distribution.md).
+For detailed deployment instructions, see [docs/firebase-app-distribution.md](docs/firebase-app-distribution.md).
 
 ## Firebase Analytics
 
@@ -163,6 +179,13 @@ EchoMap includes Firebase Analytics to track user interactions and app performan
 - Analytics are anonymous and help improve accessibility features
 - No personal location data is stored in analytics
 - Users can disable analytics in the Firebase Console if needed
+
+## Quick Links
+
+- 📚 **Documentation**: [`docs/`](docs/) - Setup guides, deployment instructions, and testing materials
+- 🚀 **Scripts**: [`scripts/`](scripts/) - Automated deployment and build scripts  
+- 📱 **TestFlight Setup**: [`docs/testflight-setup-guide.md`](docs/testflight-setup-guide.md)
+- 🔥 **Firebase Distribution**: [`docs/firebase-app-distribution.md`](docs/firebase-app-distribution.md)
 
 ## Testing Features
 
