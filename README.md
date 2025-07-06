@@ -2,6 +2,10 @@
 
 EchoMap is a vibration-only navigation app built in Flutter to empower blind and low-vision users to travel independently and confidently. By translating turn-by-turn directions into distinct haptic cues, EchoMap keeps you on the right path—no sight required.
 
+🌟 **Open Source**: EchoMap is open source and available on GitHub! We welcome contributions from developers, accessibility experts, and users.
+
+📱 **Repository**: https://github.com/Milad9A/Echo-Map
+
 ## Project Status
 
 EchoMap is currently in active development. The core functionality includes:
@@ -185,7 +189,25 @@ EchoMap includes dedicated testing screens to validate core functionality:
 
 ## Contributing
 
-Contributions to EchoMap are welcome! Please feel free to submit a Pull Request.
+EchoMap is an open source project! We welcome contributions from developers, accessibility experts, and users who want to help improve navigation for blind and low-vision users.
+
+### How to Contribute
+
+- **Report bugs** or request features via GitHub Issues
+- **Submit pull requests** with improvements or fixes
+- **Test the app** and provide feedback on accessibility features
+- **Contribute documentation** to help other developers
+- **Share your experience** to help improve the user experience
+
+### Development Setup
+
+1. Fork the repository on GitHub
+2. Clone your fork locally
+3. Follow the installation instructions above
+4. Create a new branch for your feature or bugfix
+5. Make your changes and test thoroughly
+6. Submit a pull request with a clear description
+
 
 ## License
 

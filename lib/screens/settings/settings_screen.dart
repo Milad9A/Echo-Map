@@ -1,5 +1,6 @@
 import 'package:echo_map/services/text_to_speech_service.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/vibration_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/analytics_service.dart';
@@ -317,6 +318,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _showHelpDialog();
                     },
                   ),
+
+                  ListTile(
+                    title: const Text('Open Source'),
+                    subtitle: const Text('View source code on GitHub'),
+                    trailing: const Icon(Icons.code),
+                    onTap: () {
+                      _openGitHub();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -366,6 +376,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'EchoMap is a navigation app designed for blind and low-vision users, '
             'providing navigation guidance through vibration patterns.',
           ),
+          SizedBox(height: 16),
+          Text(
+            'This app is open source and available on GitHub. '
+            'Contributions and feedback are welcome!',
+          ),
         ],
       ),
     );
@@ -408,6 +423,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _openGitHub() async {
+    final Uri url = Uri.parse('https://github.com/Milad9A/Echo-Map');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not open GitHub repository'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening GitHub: $e'),
+          ),
+        );
+      }
+    }
   }
 
   ThemeMode _appThemeModeToThemeMode(AppThemeMode appThemeMode) {
